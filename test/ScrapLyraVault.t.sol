@@ -9,6 +9,7 @@ import {ILiquidityToken} from "src/interfaces/ILiquidityToken.sol";
 import {ILiquidityPool} from "src/interfaces/ILiquidityPool.sol";
 import {ScrapLyraVault} from "src/ScrapLyraVault.sol";
 import {ScrapLyraVaultShare} from "src/ScrapLyraVaultShare.sol";
+import {ScrapLyraVaultShareERC1155} from "src/ScrapLyraVaultShareERC1155.sol";
 
 contract ScrapLyraVaultTest is Errors, Test {
     ILiquidityToken private constant LYRA_USDC_LIQUIDITY_TOKEN =
@@ -67,12 +68,22 @@ contract ScrapLyraVaultTest is Errors, Test {
 
         vault.setLiquidityToken(liquidityToken);
 
-        (ILiquidityPool _pool, ERC20 _asset, ScrapLyraVaultShare share) = vault
-            .liquidityTokens(liquidityToken);
+        (
+            ILiquidityPool _pool,
+            ERC20 _asset,
+            ScrapLyraVaultShare share,
+            ScrapLyraVaultShareERC1155 depositShare,
+            ScrapLyraVaultShareERC1155 withdrawalShare
+        ) = vault.liquidityTokens(liquidityToken);
 
         assertEq(address(pool), address(_pool));
         assertEq(address(asset), address(_asset));
-        assertEq(address(vault.owner()), share.owner());
-        assertTrue(share.supportsInterface(type(IERC1155).interfaceId));
+        assertEq(address(vault.owner()), depositShare.owner());
+        assertEq(address(vault.owner()), withdrawalShare.owner());
+        assertTrue(address(share) != address(0));
+        assertTrue(depositShare.supportsInterface(type(IERC1155).interfaceId));
+        assertTrue(
+            withdrawalShare.supportsInterface(type(IERC1155).interfaceId)
+        );
     }
 }

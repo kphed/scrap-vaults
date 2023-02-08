@@ -10,6 +10,7 @@ import {ILiquidityToken} from "src/interfaces/ILiquidityToken.sol";
 import {ILiquidityPool} from "src/interfaces/ILiquidityPool.sol";
 import {Errors} from "src/utils/Errors.sol";
 import {ScrapLyraVaultShare} from "src/ScrapLyraVaultShare.sol";
+import {ScrapLyraVaultShareERC1155} from "src/ScrapLyraVaultShareERC1155.sol";
 
 contract ScrapLyraVault is Errors, Owned, ReentrancyGuard {
     using SafeTransferLib for ERC20;
@@ -18,6 +19,8 @@ contract ScrapLyraVault is Errors, Owned, ReentrancyGuard {
         ILiquidityPool pool;
         ERC20 asset;
         ScrapLyraVaultShare share;
+        ScrapLyraVaultShareERC1155 depositShare;
+        ScrapLyraVaultShareERC1155 withdrawalShare;
     }
 
     mapping(ILiquidityToken => LiquidityToken) public liquidityTokens;
@@ -49,7 +52,9 @@ contract ScrapLyraVault is Errors, Owned, ReentrancyGuard {
         ERC20 asset = ERC20(pool.quoteAsset());
         token.pool = pool;
         token.asset = asset;
-        token.share = new ScrapLyraVaultShare(owner);
+        token.share = new ScrapLyraVaultShare("", "", 18);
+        token.depositShare = new ScrapLyraVaultShareERC1155(msg.sender);
+        token.withdrawalShare = new ScrapLyraVaultShareERC1155(msg.sender);
 
         // Set an allowance for the liquidity pool to transfer asset during deposits
         asset.safeApprove(address(pool), type(uint256).max);
