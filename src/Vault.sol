@@ -5,7 +5,7 @@ import {ERC4626} from "solmate/mixins/ERC4626.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {Owned} from "solmate/auth/Owned.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
-import {Errors} from "src/Errors.sol";
+import {Errors} from "src/utils/Errors.sol";
 
 contract Vault is Errors, ERC4626 {
     using SafeTransferLib for ERC20;
