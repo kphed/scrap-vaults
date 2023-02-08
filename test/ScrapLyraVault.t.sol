@@ -2,79 +2,77 @@
 pragma solidity 0.8.18;
 
 import "forge-std/Test.sol";
+import {ERC20} from "solmate/tokens/ERC20.sol";
+import {IERC1155} from "openzeppelin/token/ERC1155/IERC1155.sol";
 import {Errors} from "src/utils/Errors.sol";
+import {ILiquidityToken} from "src/interfaces/ILiquidityToken.sol";
 import {ILiquidityPool} from "src/interfaces/ILiquidityPool.sol";
 import {ScrapLyraVault} from "src/ScrapLyraVault.sol";
 import {ScrapLyraVaultShare} from "src/ScrapLyraVaultShare.sol";
 
 contract ScrapLyraVaultTest is Errors, Test {
-    address private constant LYRA_USDC_LIQUIDITY_POOL =
-        0xB619913921356904Bf62abA7271E694FD95AA10D;
+    ILiquidityToken private constant LYRA_USDC_LIQUIDITY_TOKEN =
+        ILiquidityToken(0xBdF4E630ded14a129aE302f930D1Ae1B40fd02aa);
+    ILiquidityPool private constant LYRA_USDC_LIQUIDITY_POOL =
+        ILiquidityPool(0xB619913921356904Bf62abA7271E694FD95AA10D);
     bytes private constant UNAUTHORIZED_ERROR = bytes("UNAUTHORIZED");
 
     ScrapLyraVault private immutable vault = new ScrapLyraVault();
 
-    event SetLiquidityPool(
-        address indexed liquidityPool,
-        address indexed quoteAsset
+    event SetLiquidityToken(
+        ILiquidityToken indexed liquidityToken,
+        ILiquidityPool indexed pool,
+        ERC20 indexed asset
     );
 
     /*//////////////////////////////////////////////////////////////
-                        setLiquidityPool TESTS
+                        setLiquidityToken TESTS
     //////////////////////////////////////////////////////////////*/
 
-    function testCannotSetLiquidityPooUnauthorized() external {
-        address liquidityPool = LYRA_USDC_LIQUIDITY_POOL;
-        string memory shareUri = "";
+    function testCannotSetLiquidityTokenUnauthorized() external {
+        ILiquidityToken liquidityToken = LYRA_USDC_LIQUIDITY_TOKEN;
 
         vm.prank(address(0));
         vm.expectRevert(UNAUTHORIZED_ERROR);
 
-        vault.setLiquidityPool(liquidityPool, shareUri);
+        vault.setLiquidityToken(liquidityToken);
     }
 
-    function testCannotSetLiquidityPoolLiquidityPoolZero() external {
-        address liquidityPool = address(0);
-        string memory shareUri = "";
+    function testCannotSetLiquidityTokenLiquidityTokenZero() external {
+        ILiquidityToken liquidityToken = ILiquidityToken(address(0));
 
         vm.expectRevert(Zero.selector);
 
-        vault.setLiquidityPool(liquidityPool, shareUri);
+        vault.setLiquidityToken(liquidityToken);
     }
 
-    function testCannotSetLiquidityPoolLiquidityPoolAlreadySet() external {
-        address liquidityPool = LYRA_USDC_LIQUIDITY_POOL;
-        string memory shareUri = "";
+    function testCannotSetLiquidityTokenAlreadySet() external {
+        ILiquidityToken liquidityToken = LYRA_USDC_LIQUIDITY_TOKEN;
 
-        vault.setLiquidityPool(liquidityPool, shareUri);
+        vault.setLiquidityToken(liquidityToken);
 
         vm.expectRevert(ScrapLyraVault.AlreadySet.selector);
 
-        vault.setLiquidityPool(liquidityPool, shareUri);
+        vault.setLiquidityToken(liquidityToken);
     }
 
-    function testSetLiquidityPool() external {
-        address liquidityPool = LYRA_USDC_LIQUIDITY_POOL;
-        string memory shareUri = "";
+    function testSetLiquidityToken() external {
+        ILiquidityToken liquidityToken = LYRA_USDC_LIQUIDITY_TOKEN;
+        ILiquidityPool pool = ILiquidityPool(liquidityToken.liquidityPool());
+        ERC20 asset = ERC20(pool.quoteAsset());
 
-        vm.expectEmit(true, true, false, true, address(vault));
+        vm.expectEmit(true, true, true, true, address(vault));
 
-        emit SetLiquidityPool(
-            liquidityPool,
-            ILiquidityPool(liquidityPool).quoteAsset()
-        );
+        emit SetLiquidityToken(liquidityToken, pool, asset);
 
-        vault.setLiquidityPool(liquidityPool, shareUri);
+        vault.setLiquidityToken(liquidityToken);
 
-        (
-            uint96 createdAt,
-            address quoteAsset,
-            ScrapLyraVaultShare share
-        ) = vault.liquidityPools(liquidityPool);
+        (ILiquidityPool _pool, ERC20 _asset, ScrapLyraVaultShare share) = vault
+            .liquidityTokens(liquidityToken);
 
-        assertEq(block.timestamp, createdAt);
-        assertEq(ILiquidityPool(liquidityPool).quoteAsset(), quoteAsset);
-        assertTrue(address(share) != address(0));
+        assertEq(address(pool), address(_pool));
+        assertEq(address(asset), address(_asset));
         assertEq(address(vault.owner()), share.owner());
+        assertTrue(share.supportsInterface(type(IERC1155).interfaceId));
     }
 }

@@ -15,4 +15,10 @@ interface ILiquidityPool {
     function processDepositQueue(uint256 limit) external;
 
     function quoteAsset() external view returns (address);
+
+    function nextQueuedDepositId() external view returns (uint256);
+
+    function queuedDeposits(
+        uint256
+    ) external view returns (QueuedDeposit memory);
 }

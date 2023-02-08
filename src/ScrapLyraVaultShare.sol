@@ -7,10 +7,7 @@ import {ERC1155} from "openzeppelin/token/ERC1155/ERC1155.sol";
 import {Errors} from "src/utils/Errors.sol";
 
 contract ScrapLyraVaultShare is Errors, Owned, ERC1155Supply {
-    constructor(
-        address _owner,
-        string memory _uri
-    ) Owned(_owner) ERC1155(_uri) {}
+    constructor(address _owner) Owned(_owner) ERC1155("") {}
 
     function setURI(string memory newuri) external onlyOwner {
         _setURI(newuri);
