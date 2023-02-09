@@ -9,7 +9,6 @@ import {Errors} from "src/utils/Errors.sol";
 import {ILiquidityToken} from "src/interfaces/ILiquidityToken.sol";
 import {ILiquidityPool} from "src/interfaces/ILiquidityPool.sol";
 import {ScrapLyraVault} from "src/ScrapLyraVault.sol";
-import {ScrapLyraVaultShare} from "src/ScrapLyraVaultShare.sol";
 import {ScrapLyraVaultShareERC1155} from "src/ScrapLyraVaultShareERC1155.sol";
 
 contract ScrapLyraVaultTest is Errors, Test {
@@ -23,7 +22,12 @@ contract ScrapLyraVaultTest is Errors, Test {
     bytes32 public constant VAULT_ROLE = keccak256("VAULT_ROLE");
 
     ScrapLyraVault private immutable vault =
-        new ScrapLyraVault(LYRA_USDC_LIQUIDITY_TOKEN);
+        new ScrapLyraVault(
+            LYRA_USDC_LIQUIDITY_TOKEN,
+            "Scrap x Lyra | ETH Vault",
+            "scrapLYRA-ETH",
+            18
+        );
 
     function _hasRole(
         AccessControl accessControl,
