@@ -37,7 +37,8 @@ contract ScrapLyraVault is Errors, Owned, ReentrancyGuard {
 
     /**
      * Set a Lyra liquidity token along with its associated pool and asset, and
-     * deploy its share contracts.
+     * deploy its share contracts
+     *
      * @param liquidityToken  ILiquidityToken  Liquidity token contract interface
      */
     function setLiquidityToken(
@@ -53,7 +54,7 @@ contract ScrapLyraVault is Errors, Owned, ReentrancyGuard {
         ERC20 asset = ERC20(pool.quoteAsset());
         token.pool = pool;
         token.asset = asset;
-        token.share = new ScrapLyraVaultShare("", "", 18);
+        token.share = new ScrapLyraVaultShare("", "", 18, address(this));
         token.depositShare = new ScrapLyraVaultShareERC1155(
             msg.sender,
             address(this)

@@ -91,6 +91,7 @@ contract ScrapLyraVaultTest is Errors, Test {
         assertEq(address(pool), address(_pool));
         assertEq(address(asset), address(_asset));
         assertTrue(address(share) != address(0));
+        assertTrue(_hasRole(share, VAULT_ROLE, address(vault)));
         assertTrue(_hasRole(depositShare, ADMIN_ROLE, address(this)));
         assertTrue(_hasRole(withdrawShare, ADMIN_ROLE, address(this)));
         assertTrue(_hasRole(depositShare, VAULT_ROLE, address(vault)));
