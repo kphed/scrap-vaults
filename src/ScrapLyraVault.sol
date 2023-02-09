@@ -11,6 +11,7 @@ import {ILiquidityPool} from "src/interfaces/ILiquidityPool.sol";
 import {Errors} from "src/utils/Errors.sol";
 import {ScrapLyraVaultShare} from "src/ScrapLyraVaultShare.sol";
 import {ScrapLyraVaultShareERC1155} from "src/ScrapLyraVaultShareERC1155.sol";
+import {IFlywheelRewards} from "src/interfaces/IFlywheelRewards.sol";
 
 contract ScrapLyraVault is Errors, Owned, ReentrancyGuard {
     using SafeTransferLib for ERC20;
@@ -43,7 +44,16 @@ contract ScrapLyraVault is Errors, Owned, ReentrancyGuard {
         liquidityToken = _liquidityToken;
         liquidityPool = ILiquidityPool(liquidityToken.liquidityPool());
         quoteAsset = ERC20(liquidityPool.quoteAsset());
-        share = new ScrapLyraVaultShare("", "", 18, address(this));
+        share = new ScrapLyraVaultShare(
+            "",
+            "",
+            18,
+            // Placeholder values
+            ERC20(address(0)),
+            IFlywheelRewards(address(0)),
+            msg.sender,
+            address(this)
+        );
         depositShare = new ScrapLyraVaultShareERC1155(
             msg.sender,
             address(this)
