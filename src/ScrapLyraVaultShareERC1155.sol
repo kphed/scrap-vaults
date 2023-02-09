@@ -11,15 +11,18 @@ import {IERC1155MetadataURI} from "openzeppelin/token/ERC1155/extensions/IERC115
 import {Errors} from "src/utils/Errors.sol";
 
 contract ScrapLyraVaultShareERC1155 is Errors, AccessControl, ERC1155Supply {
-    bytes32 public constant DEV_ROLE = keccak256("DEV_ROLE");
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant VAULT_ROLE = keccak256("VAULT_ROLE");
 
-    constructor(address dev, address vault) ERC1155("") {
-        if (dev == address(0)) revert Zero();
+    event TransferAdminRole(address indexed oldAdmin, address indexed newAdmin);
+    event SetURI(string indexed newuri);
+
+    constructor(address admin, address vault) ERC1155("") {
+        if (admin == address(0)) revert Zero();
         if (vault == address(0)) revert Zero();
 
-        // Grant the dev role which enables limited access to permissioned methods
-        _setupRole(DEV_ROLE, dev);
+        // Grant the non-default admin role with limited access to permissioned methods
+        _setupRole(ADMIN_ROLE, admin);
 
         // Grant the vault role which enables minting and burning of share tokens
         _setupRole(VAULT_ROLE, vault);
@@ -35,8 +38,19 @@ contract ScrapLyraVaultShareERC1155 is Errors, AccessControl, ERC1155Supply {
             super.supportsInterface(interfaceId);
     }
 
-    function setURI(string memory newuri) external onlyRole(DEV_ROLE) {
+    function transferAdminRole(address newAdmin) external onlyRole(ADMIN_ROLE) {
+        if (newAdmin == address(0)) revert Zero();
+
+        _revokeRole(ADMIN_ROLE, msg.sender);
+        _setupRole(ADMIN_ROLE, newAdmin);
+
+        emit TransferAdminRole(msg.sender, newAdmin);
+    }
+
+    function setURI(string memory newuri) external onlyRole(ADMIN_ROLE) {
         _setURI(newuri);
+
+        emit SetURI(newuri);
     }
 
     function mint(
