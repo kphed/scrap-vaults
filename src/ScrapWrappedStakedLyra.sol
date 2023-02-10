@@ -3,8 +3,10 @@ pragma solidity 0.8.18;
 
 import {ERC4626} from "solmate/mixins/ERC4626.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
+import {Owned} from "solmate/auth/Owned.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {ReentrancyGuard} from "solmate/utils/ReentrancyGuard.sol";
+import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 
 interface IStkLyra {
     function getTotalRewardsBalance(address) external view returns (uint256);
@@ -12,19 +14,38 @@ interface IStkLyra {
     function claimRewards(address, uint256) external;
 }
 
-contract ScrapWrappedStakedLyra is ReentrancyGuard, ERC4626 {
+contract ScrapWrappedStakedLyra is ReentrancyGuard, Owned, ERC4626 {
     using SafeTransferLib for ERC20;
+    using FixedPointMathLib for uint256;
 
     IStkLyra public constant STK_LYRA =
         IStkLyra(0xCb9f85730f57732fc899fb158164b9Ed60c77D49);
 
-    constructor()
+    uint256 public constant FEE_BASE = 10_000;
+    uint256 public constant MAX_FEE = 1_000;
+
+    // All fees go directly to the wstkLYRA/LYRA liquidity pool
+    uint256 public REWARD_FEE = 500;
+
+    event SetRewardFee(uint256);
+
+    constructor(
+        address _owner
+    )
+        Owned(_owner)
         ERC4626(
             ERC20(address(STK_LYRA)),
             "Scrap.sh | Wrapped Staked Lyra",
             "wstkLYRA"
         )
     {}
+
+    function setRewardFee(uint256 fee) external onlyOwner {
+        // If fee exceeds max, set it to the max fee
+        REWARD_FEE = fee > MAX_FEE ? MAX_FEE : fee;
+
+        emit SetRewardFee(fee);
+    }
 
     function totalAssets() public view override returns (uint256) {
         return
@@ -38,6 +59,11 @@ contract ScrapWrappedStakedLyra is ReentrancyGuard, ERC4626 {
         uint256 rewards = STK_LYRA.getTotalRewardsBalance(address(this));
 
         STK_LYRA.claimRewards(address(this), rewards);
+
+        // Mint wstkLYRA against the newly-claimed rewards, and add them to the LP
+        _mint(address(this), rewards.mulDivDown(REWARD_FEE, FEE_BASE));
+
+        // TODO: Add liquidity to the LP, transfer LP tokens to the owner
     }
 
     function claimRewards() external nonReentrant {
