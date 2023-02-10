@@ -28,7 +28,7 @@ contract ScrapLyraVault is Errors, ReentrancyGuard, ERC20 {
     ERC20 public constant STK_LYRA =
         ERC20(0x5B237ab26CeD47Fb8ED104671819C801Aa5bA45E);
     IMultiDistributor public constant MULTI_DISTRIBUTOR =
-        IMultiDistributor(address(0));
+        IMultiDistributor(0xecB73D4621Cabbf199e778CAEBc74bE27f2EcEe1);
 
     ILiquidityToken public immutable liquidityToken;
     ILiquidityPool public immutable liquidityPool;
