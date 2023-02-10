@@ -49,6 +49,7 @@ contract ScrapLyraVaultTest is Helper, ERC1155TokenReceiver {
 
     ScrapLyraVault private immutable vault =
         new ScrapLyraVault(
+            address(this),
             USDC_LIQUIDITY_TOKEN,
             "Scrap x Lyra | ETH Vault",
             "scrapLYRA-ETH",

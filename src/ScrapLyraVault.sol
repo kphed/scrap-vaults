@@ -70,6 +70,7 @@ contract ScrapLyraVault is Errors, ReentrancyGuard, ERC20 {
     );
 
     constructor(
+        address admin,
         ILiquidityToken _liquidityToken,
         string memory _name,
         string memory _symbol,
@@ -80,14 +81,8 @@ contract ScrapLyraVault is Errors, ReentrancyGuard, ERC20 {
         liquidityToken = _liquidityToken;
         liquidityPool = ILiquidityPool(liquidityToken.liquidityPool());
         quoteAsset = ERC20(liquidityPool.quoteAsset());
-        depositShare = new ScrapLyraVaultShareERC1155(
-            msg.sender,
-            address(this)
-        );
-        withdrawShare = new ScrapLyraVaultShareERC1155(
-            msg.sender,
-            address(this)
-        );
+        depositShare = new ScrapLyraVaultShareERC1155(admin, address(this));
+        withdrawShare = new ScrapLyraVaultShareERC1155(admin, address(this));
 
         // Set an allowance for the liquidity pool to transfer asset during deposits
         quoteAsset.safeApprove(address(liquidityPool), type(uint256).max);
