@@ -343,30 +343,35 @@ contract ScrapLyraVault is Errors, ReentrancyGuard, ERC20 {
         if (id == 0) revert Zero();
         if (amount == 0) revert Zero();
 
-        uint256 remainingMintableShares = liquidityPool
+        uint256 mintedLiquidityTokens = liquidityPool
             .queuedDeposits(id)
-            .mintedTokens - sharesMinted[id];
+            .mintedTokens;
+        uint256 remainingMintableShares = mintedLiquidityTokens -
+            sharesMinted[id];
 
         // Queued deposit for the id must be processed first
         if (remainingMintableShares == 0) revert Invalid();
 
         // Handle the case where the user does not own the entire deposit share supply
+        uint256 totalSupply = depositShare.totalSupply(id);
         uint256 vaultShareAmount = remainingMintableShares.mulDivDown(
             amount,
-            depositShare.totalSupply(id)
+            totalSupply
         );
 
         // Burn the deposit shares
         depositShare.burn(msg.sender, id, amount);
 
-        // Mint the remaining amount for the receiver if there are no more shares
-        if (depositShare.totalSupply(id) == 0)
-            vaultShareAmount = remainingMintableShares;
+        // Mint the remaining amount for the receiver if all deposit shares are converted
+        if (amount == totalSupply) vaultShareAmount = remainingMintableShares;
 
         // Mint vault shares for the receiver
         _accrueMint(receiver, vaultShareAmount);
 
         sharesMinted[id] += vaultShareAmount;
+
+        // The amount of vault shares minted for this deposit should never exceed the LP tokens
+        assert(sharesMinted[id] <= mintedLiquidityTokens);
 
         emit ConvertDepositShares(
             msg.sender,
