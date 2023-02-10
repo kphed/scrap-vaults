@@ -39,6 +39,7 @@ contract ScrapLyraVault is Errors, ReentrancyGuard, ERC20 {
     RewardsState public strategyState;
     mapping(address => uint224) public userIndex;
     mapping(address => uint256) public rewardsAccrued;
+    mapping(uint256 => uint256) public sharesMinted;
 
     event Deposit(
         address indexed msgSender,
@@ -342,14 +343,15 @@ contract ScrapLyraVault is Errors, ReentrancyGuard, ERC20 {
         if (id == 0) revert Zero();
         if (amount == 0) revert Zero();
 
-        ILiquidityPool.QueuedDeposit memory queuedDeposit = liquidityPool
-            .queuedDeposits(id);
+        uint256 remainingMintableShares = liquidityPool
+            .queuedDeposits(id)
+            .mintedTokens - sharesMinted[id];
 
         // Queued deposit for the id must be processed first
-        if (queuedDeposit.mintedTokens == 0) revert Invalid();
+        if (remainingMintableShares == 0) revert Invalid();
 
         // Handle the case where the user does not own the entire deposit share supply
-        uint256 vaultShareAmount = queuedDeposit.mintedTokens.mulDivDown(
+        uint256 vaultShareAmount = remainingMintableShares.mulDivDown(
             amount,
             depositShare.totalSupply(id)
         );
@@ -357,8 +359,14 @@ contract ScrapLyraVault is Errors, ReentrancyGuard, ERC20 {
         // Burn the deposit shares
         depositShare.burn(msg.sender, id, amount);
 
+        // Mint the remaining amount for the receiver if there are no more shares
+        if (depositShare.totalSupply(id) == 0)
+            vaultShareAmount = remainingMintableShares;
+
         // Mint vault shares for the receiver
         _accrueMint(receiver, vaultShareAmount);
+
+        sharesMinted[id] += vaultShareAmount;
 
         emit ConvertDepositShares(
             msg.sender,

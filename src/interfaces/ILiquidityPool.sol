@@ -1,7 +1,18 @@
-// SPDX-License-Identifier: MIT
 pragma solidity 0.8.18;
 
 interface ILiquidityPool {
+    struct LiquidityPoolParameters {
+        uint256 minDepositWithdraw;
+        uint256 depositDelay;
+        uint256 withdrawalDelay;
+        uint256 withdrawalFee;
+        address guardianMultisig;
+        uint256 guardianDelay;
+        uint256 adjustmentNetScalingFactor;
+        uint256 callCollatScalingFactor;
+        uint256 putCollatScalingFactor;
+    }
+
     struct QueuedDeposit {
         uint256 id;
         address beneficiary;
@@ -23,4 +34,11 @@ interface ILiquidityPool {
     ) external view returns (QueuedDeposit memory);
 
     function getTokenPrice() external view returns (uint256);
+
+    function queuedDepositHead() external view returns (uint256);
+
+    function getLpParams()
+        external
+        view
+        returns (LiquidityPoolParameters memory);
 }
