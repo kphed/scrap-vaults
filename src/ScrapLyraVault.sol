@@ -12,6 +12,7 @@ import {ILiquidityPool} from "src/interfaces/ILiquidityPool.sol";
 import {Errors} from "src/utils/Errors.sol";
 import {ScrapLyraVaultShareERC1155} from "src/ScrapLyraVaultShareERC1155.sol";
 import {IMultiDistributor} from "src/interfaces/IMultiDistributor.sol";
+import {ConvertDecimals} from "src/libraries/ConvertDecimals.sol";
 
 contract ScrapLyraVault is Errors, ReentrancyGuard, ERC20 {
     using SafeTransferLib for ERC20;
@@ -98,6 +99,12 @@ contract ScrapLyraVault is Errors, ReentrancyGuard, ERC20 {
     ) private view {
         ILiquidityPool.QueuedDeposit memory queuedDeposit = liquidityPool
             .queuedDeposits(queuedDepositId);
+
+        // Ensure that the amount is converted using the same methodology as the Lyra LP contract
+        amountLiquidity = ConvertDecimals.convertTo18(
+            amountLiquidity,
+            quoteAsset.decimals()
+        );
 
         if (
             queuedDeposit.beneficiary == address(this) &&
@@ -292,7 +299,7 @@ contract ScrapLyraVault is Errors, ReentrancyGuard, ERC20 {
             address(this)
         );
 
-        // Signal a deposit to the liquidity pool, which may mint liquidity token
+        // Signal a deposit to the liquidity pool, which may mint liquidity tokens
         // or queue the deposit, depending on the state of the protocol
         liquidityPool.initiateDeposit(address(this), amount);
 
@@ -303,11 +310,11 @@ contract ScrapLyraVault is Errors, ReentrancyGuard, ERC20 {
             // Get the ID of our recently queued deposit
             uint256 queuedDepositId = liquidityPool.nextQueuedDepositId() - 1;
 
-            // Verify that the queued deposit is actually ours (sanity check)
+            // Verify that the recently queued deposit is ours (sanity check)
             _verifyQueuedDeposit(queuedDepositId, amount, block.timestamp);
 
             // Mint deposit shares for the receiver, which can later be converted
-            // into vault shares after the liquiidty is added to the pool
+            // into vault shares after the liquidity is added to the pool
             depositShare.mint(receiver, queuedDepositId, amount, "");
 
             emit Deposit(msg.sender, receiver, amount, queuedDepositId, amount);

@@ -21,4 +21,6 @@ interface ILiquidityPool {
     function queuedDeposits(
         uint256
     ) external view returns (QueuedDeposit memory);
+
+    function getTokenPrice() external view returns (uint256);
 }
