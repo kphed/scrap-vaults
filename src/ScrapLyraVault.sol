@@ -122,8 +122,6 @@ contract ScrapLyraVault is Errors, ReentrancyGuard, ERC20 {
     }
 
     function _getAccruedRewards() private returns (uint256) {
-        // TODO: Improve efficiency once the Lyra contract is deployed on Arbitrum
-
         uint256 balanceBeforeClaim = STK_LYRA.balanceOf(address(this));
         IERC20[] memory claimTokens = new IERC20[](1);
         claimTokens[0] = IERC20(address(STK_LYRA));
@@ -140,19 +138,14 @@ contract ScrapLyraVault is Errors, ReentrancyGuard, ERC20 {
 
         rewardsState = state;
 
-        if (strategyRewardsAccrued > 0) {
-            uint256 supplyTokens = totalSupply;
-            uint224 deltaIndex;
-
-            if (supplyTokens != 0)
-                deltaIndex = ((strategyRewardsAccrued * ONE) / supplyTokens)
-                    .safeCastTo224();
-
-            rewardsState = RewardsState({
-                index: state.index + deltaIndex,
+        if (strategyRewardsAccrued != 0) {
+            strategyState = (rewardsState = RewardsState({
+                index: state.index +
+                    // Based on how the vault will operate, the supply will be non-zero if there are rewards
+                    ((strategyRewardsAccrued * ONE) / totalSupply)
+                        .safeCastTo224(),
                 lastUpdatedTimestamp: block.timestamp.safeCastTo32()
-            });
-            strategyState = rewardsState;
+            }));
         }
     }
 
@@ -166,9 +159,8 @@ contract ScrapLyraVault is Errors, ReentrancyGuard, ERC20 {
 
         if (supplierIndex == 0) supplierIndex = ONE;
 
-        uint224 deltaIndex = strategyIndex - supplierIndex;
-        uint256 supplierTokens = balanceOf[user];
-        uint256 supplierDelta = (supplierTokens * deltaIndex) / ONE;
+        uint256 supplierDelta = (balanceOf[user] *
+            (strategyIndex - supplierIndex)) / ONE;
         uint256 supplierAccrued = rewardsAccrued[user] + supplierDelta;
         rewardsAccrued[user] = supplierAccrued;
 
@@ -268,8 +260,6 @@ contract ScrapLyraVault is Errors, ReentrancyGuard, ERC20 {
     }
 
     function claimRewards() external nonReentrant {
-        if (msg.sender == address(0)) revert Zero();
-
         // Ensure accrued rewards are up-to-date prior to claiming
         uint256 accrued = _accrue(msg.sender);
 
@@ -331,8 +321,8 @@ contract ScrapLyraVault is Errors, ReentrancyGuard, ERC20 {
      * Convert deposit shares into vault shares
      *
      * @param receiver  address  Receiver of vault shares
-     * @param id        uint256  Deposit share IDs
-     * @param amount    uint256  Deposit share ID amounts
+     * @param id        uint256  Deposit share ID
+     * @param amount    uint256  Deposit share ID amount
      */
     function convertDepositShares(
         address receiver,
