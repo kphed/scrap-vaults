@@ -2,11 +2,12 @@
 pragma solidity 0.8.18;
 
 import {Owned} from "solmate/auth/Owned.sol";
-import {ReentrancyGuard} from "solmate/utils/ReentrancyGuard.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
+import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
+import {ReentrancyGuard} from "solmate/utils/ReentrancyGuard.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {SafeCastLib} from "solmate/utils/SafeCastLib.sol";
-import {IERC20} from "openzeppelin/token/ERC20/IERC20.sol";
+import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {ILiquidityToken} from "src/interfaces/ILiquidityToken.sol";
 import {ILiquidityPool} from "src/interfaces/ILiquidityPool.sol";
 import {Errors} from "src/utils/Errors.sol";
@@ -17,6 +18,7 @@ import {IMultiDistributor} from "src/interfaces/IMultiDistributor.sol";
 contract ScrapLyraVault is Errors, Owned, ReentrancyGuard, ERC20 {
     using SafeTransferLib for ERC20;
     using SafeCastLib for uint256;
+    using FixedPointMathLib for uint256;
 
     struct RewardsState {
         uint224 index;
@@ -42,9 +44,16 @@ contract ScrapLyraVault is Errors, Owned, ReentrancyGuard, ERC20 {
     event Deposit(
         address indexed msgSender,
         address indexed receiver,
-        uint256 indexed queuedDepositId,
         uint256 amount,
+        uint256 indexed queuedDepositId,
         uint256 shareAmount
+    );
+    event ConvertDepositShares(
+        address indexed msgSender,
+        address indexed receiver,
+        uint256 indexed id,
+        uint256 amount,
+        uint256 vaultShareAmount
     );
     event AccrueRewards(
         address indexed user,
@@ -107,6 +116,8 @@ contract ScrapLyraVault is Errors, Owned, ReentrancyGuard, ERC20 {
     }
 
     function _getAccruedRewards() private returns (uint256) {
+        // TODO: Improve efficiency of this method once its deployed on Arbitrum
+
         uint256 balanceBeforeClaim = STK_LYRA.balanceOf(address(this));
         IERC20[] memory claimTokens = new IERC20[](1);
         claimTokens[0] = IERC20(address(STK_LYRA));
@@ -262,14 +273,13 @@ contract ScrapLyraVault is Errors, Owned, ReentrancyGuard, ERC20 {
     /**
      * Deposit a Lyra liquidity pool quote asset for share tokens and earn rewards
      *
-     * @param amount          uint256          Quote asset amount to deposit
-     * @param receiver        address          Receiver of share tokens
+     * @param receiver  address  Receiver of deposit or vault share tokens
+     * @param amount    uint256  Quote asset amount to deposit
      */
-    function deposit(uint256 amount, address receiver) external nonReentrant {
-        if (address(liquidityToken) == address(0)) revert Zero();
+    function deposit(address receiver, uint256 amount) external nonReentrant {
+        if (receiver == address(0)) revert Zero();
         if (amount == 0) revert Zero();
 
-        // Reverts if liquidity token is not set
         quoteAsset.safeTransferFrom(msg.sender, address(this), amount);
 
         // Enables us to determine the exact amount of liquidity tokens minted
@@ -282,33 +292,69 @@ contract ScrapLyraVault is Errors, Owned, ReentrancyGuard, ERC20 {
         // or queue the deposit, depending on the state of the protocol
         liquidityPool.initiateDeposit(address(this), amount);
 
-        uint256 liquidityTokensMinted = liquidityToken.balanceOf(
-            address(this)
-        ) - balanceBeforeInitiation;
+        uint256 balanceDelta = liquidityToken.balanceOf(address(this)) -
+            balanceBeforeInitiation;
 
-        if (liquidityTokensMinted == 0) {
+        if (balanceDelta == 0) {
             // Get the ID of our recently queued deposit
             uint256 queuedDepositId = liquidityPool.nextQueuedDepositId() - 1;
 
             // Verify that the queued deposit is actually ours (sanity check)
             _verifyQueuedDeposit(queuedDepositId, amount, block.timestamp);
 
-            // Mint deposit shares for the receiver, which accrues rewards but does
-            // not allow the receiver to withdraw the underlying liquidity tokens
+            // Mint deposit shares for the receiver, which can later be converted
+            // into vault shares after the liquiidty is added to the pool
             depositShare.mint(receiver, queuedDepositId, amount, "");
 
             emit Deposit(msg.sender, receiver, amount, queuedDepositId, amount);
         } else {
             // Mint shares for the receiver if the liquidity was immediately added
-            _accrueMint(receiver, liquidityTokensMinted);
+            _accrueMint(receiver, balanceDelta);
 
-            emit Deposit(
-                msg.sender,
-                receiver,
-                amount,
-                0,
-                liquidityTokensMinted
-            );
+            emit Deposit(msg.sender, receiver, amount, 0, balanceDelta);
         }
+    }
+
+    /**
+     * Convert deposit shares into vault shares
+     *
+     * @param receiver  address  Receiver of vault shares
+     * @param id        uint256  Deposit share IDs
+     * @param amount    uint256  Deposit share ID amounts
+     */
+    function convertDepositShares(
+        address receiver,
+        uint256 id,
+        uint256 amount
+    ) external nonReentrant {
+        if (receiver == address(0)) revert Zero();
+        if (id == 0) revert Zero();
+        if (amount == 0) revert Zero();
+
+        ILiquidityPool.QueuedDeposit memory queuedDeposit = liquidityPool
+            .queuedDeposits(id);
+
+        // Queued deposit for the id must be processed first
+        if (queuedDeposit.mintedTokens == 0) revert Invalid();
+
+        // Handle the case where the user does not own the entire deposit share supply
+        uint256 vaultShareAmount = queuedDeposit.mintedTokens.mulDivDown(
+            amount,
+            depositShare.totalSupply(id)
+        );
+
+        // Burn the deposit shares
+        depositShare.burn(msg.sender, id, amount);
+
+        // Mint vault shares for the receiver
+        _accrueMint(receiver, vaultShareAmount);
+
+        emit ConvertDepositShares(
+            msg.sender,
+            receiver,
+            id,
+            amount,
+            vaultShareAmount
+        );
     }
 }
