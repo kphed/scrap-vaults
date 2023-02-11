@@ -48,11 +48,7 @@ contract ScrapWrappedStakedLyra is ReentrancyGuard, Owned, ERC4626 {
     }
 
     function totalAssets() public view override returns (uint256) {
-        return
-            asset.balanceOf(address(this)) +
-            // Include the total rewards balance in the total assets amounts
-            // since rewards are claimed prior to deposits or withdrawals
-            STK_LYRA.getTotalRewardsBalance(address(this));
+        return asset.balanceOf(address(this));
     }
 
     function _claimRewards() private {
@@ -61,9 +57,19 @@ contract ScrapWrappedStakedLyra is ReentrancyGuard, Owned, ERC4626 {
         STK_LYRA.claimRewards(address(this), rewards);
 
         // Mint wstkLYRA against the newly-claimed rewards, and add them to the LP
-        _mint(address(this), rewards.mulDivDown(REWARD_FEE, FEE_BASE));
+        uint256 rewardFee = rewards.mulDivDown(REWARD_FEE, FEE_BASE);
+
+        if (rewardFee == 0) return;
+
+        _mint(
+            address(this),
+            // Modified `convertToShares` logic with the assumption that totalSupply is
+            // always non-zero, and with the reward fee amount deducted from total assets
+            rewardFee.mulDivDown(totalSupply, totalAssets() - rewardFee)
+        );
 
         // TODO: Add liquidity to the LP, transfer LP tokens to the owner
+        // TODO: Max approve wstkLYRA @ the LP contract
     }
 
     function claimRewards() external nonReentrant {
