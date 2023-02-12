@@ -29,6 +29,8 @@ contract ScrapWrappedStakedLyraTest is Helper {
         uint256 assets,
         uint256 shares
     );
+    event SetLiquidityFee(uint256);
+    event SetLiquidityPool(address);
 
     constructor() {
         address[2] memory coins = [
@@ -60,6 +62,7 @@ contract ScrapWrappedStakedLyraTest is Helper {
 
         _seedVault();
         _seedPool();
+        _provisionVault();
     }
 
     function _seedVault() private {
@@ -196,5 +199,237 @@ contract ScrapWrappedStakedLyraTest is Helper {
                 ++i;
             }
         }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        setLiquidityFee TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    function testCannotSetLiquidityFeeUnauthorized() external {
+        uint256 fee = 1;
+
+        vm.expectRevert(UNAUTHORIZED_ERROR);
+        vm.prank(address(0));
+
+        vault.setLiquidityFee(fee);
+    }
+
+    function testSetLiquidityFeeFuzz(uint16 fee) external {
+        uint256 maxFee = vault.MAX_FEE();
+        uint256 expectedFee = fee > maxFee ? maxFee : fee;
+
+        vm.expectEmit(false, false, false, true, address(vault));
+
+        emit SetLiquidityFee(expectedFee);
+
+        vault.setLiquidityFee(expectedFee);
+
+        assertEq(expectedFee, vault.liquidityFee());
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        setLiquidityPool TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    function testCannotSetLiquidityPoolUnauthorized() external {
+        address liquidityPool = address(this);
+
+        vm.expectRevert(UNAUTHORIZED_ERROR);
+        vm.prank(address(0));
+
+        vault.setLiquidityPool(liquidityPool);
+    }
+
+    function testCannotSetLiquidityPoolZeroAddress() external {
+        address liquidityPool = address(0);
+
+        vm.expectRevert(Zero.selector);
+
+        vault.setLiquidityPool(liquidityPool);
+    }
+
+    function testSetLiquidityPool() public {
+        address liquidityPool = address(this);
+
+        vm.expectEmit(false, false, false, true, address(vault));
+
+        emit SetLiquidityPool(liquidityPool);
+
+        vault.setLiquidityPool(liquidityPool);
+
+        assertEq(liquidityPool, vault.liquidityPool());
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            depositLYRA TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    function testCannotDepositLYRAZeroAmount() external {
+        uint256 amount = 0;
+        address receiver = address(this);
+
+        vm.expectRevert(Zero.selector);
+
+        vault.depositLYRA(amount, receiver);
+    }
+
+    function testCannotDepositLYRAZeroAddress() external {
+        uint256 amount = 1e18;
+        address receiver = address(0);
+
+        vm.expectRevert(Zero.selector);
+
+        vault.depositLYRA(amount, receiver);
+    }
+
+    function testCannotDepositLYRAInsufficientBalance() external {
+        uint256 amount = 1e18;
+        address receiver = address(this);
+
+        _getLYRA(address(this), amount);
+
+        lyra.approve(address(vault), amount);
+
+        vm.expectRevert(TRANSFER_FROM_FAILED_ERROR);
+
+        vault.depositLYRA(amount + 1, receiver);
+    }
+
+    function testDepositLYRA() external {
+        uint256 amount = 1e18;
+        address receiver = address(this);
+        (uint256 assetsAfterRewards, uint256 supplyAfterRewards) = vault
+            .totalsAfterRewards();
+        uint256 shares = amount.mulDivDown(
+            supplyAfterRewards,
+            assetsAfterRewards
+        );
+        uint256 balanceBeforeDeposit = vault.balanceOf(receiver);
+
+        _getLYRA(address(this), amount);
+
+        lyra.approve(address(vault), amount);
+
+        _checkDepositEvent(address(this), receiver, amount);
+
+        vault.depositLYRA(amount, receiver);
+
+        assertEq(assetsAfterRewards + amount, vault.totalAssets());
+        assertEq(supplyAfterRewards + shares, vault.totalSupply());
+        assertEq(balanceBeforeDeposit + shares, vault.balanceOf(receiver));
+    }
+
+    function testDepositLYRAFuzz(
+        uint88 amount,
+        bool separateReceiver
+    ) external {
+        vm.assume(amount > 1e9);
+        vm.assume(amount < 10_000_000e18);
+
+        address receiver = separateReceiver ? testAcc[0] : address(this);
+        (uint256 assetsAfterRewards, uint256 supplyAfterRewards) = vault
+            .totalsAfterRewards();
+        uint256 shares = uint256(amount).mulDivDown(
+            supplyAfterRewards,
+            assetsAfterRewards
+        );
+        uint256 balanceBeforeDeposit = vault.balanceOf(receiver);
+
+        _getLYRA(address(this), amount);
+
+        lyra.approve(address(vault), amount);
+
+        _checkDepositEvent(address(this), receiver, amount);
+
+        vault.depositLYRA(amount, receiver);
+
+        assertEq(assetsAfterRewards + amount, vault.totalAssets());
+        assertEq(supplyAfterRewards + shares, vault.totalSupply());
+        assertEq(balanceBeforeDeposit + shares, vault.balanceOf(receiver));
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            deposit TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    function testCannotDepositZeroAmount() external {
+        uint256 assets = 0;
+        address receiver = address(this);
+
+        vm.expectRevert(Zero.selector);
+
+        vault.deposit(assets, receiver);
+    }
+
+    function testCannotDepositZeroAddress() external {
+        uint256 assets = 1e18;
+        address receiver = address(0);
+
+        vm.expectRevert(Zero.selector);
+
+        vault.deposit(assets, receiver);
+    }
+
+    function testCannotDepositInsufficientBalance() external {
+        uint256 assets = 1e18;
+        address receiver = address(this);
+
+        _getStkLYRA(address(this), assets);
+
+        stkLYRA.approve(address(vault), assets);
+
+        vm.expectRevert(TRANSFER_FROM_FAILED_ERROR);
+
+        vault.deposit(assets + 1, receiver);
+    }
+
+    function testDeposit() external {
+        uint256 assets = 1e18;
+        address receiver = address(this);
+        (uint256 assetsAfterRewards, uint256 supplyAfterRewards) = vault
+            .totalsAfterRewards();
+        uint256 shares = assets.mulDivDown(
+            supplyAfterRewards,
+            assetsAfterRewards
+        );
+        uint256 balanceBeforeDeposit = vault.balanceOf(receiver);
+
+        _getStkLYRA(address(this), assets);
+
+        stkLYRA.approve(address(vault), assets);
+
+        _checkDepositEvent(address(this), receiver, assets);
+
+        vault.deposit(assets, receiver);
+
+        assertEq(assetsAfterRewards + assets, vault.totalAssets());
+        assertEq(supplyAfterRewards + shares, vault.totalSupply());
+        assertEq(balanceBeforeDeposit + shares, vault.balanceOf(receiver));
+    }
+
+    function testDepositFuzz(uint88 assets, bool separateReceiver) external {
+        vm.assume(assets > 1e9);
+        vm.assume(assets < 10_000_000e18);
+
+        address receiver = separateReceiver ? testAcc[0] : address(this);
+        (uint256 assetsAfterRewards, uint256 supplyAfterRewards) = vault
+            .totalsAfterRewards();
+        uint256 shares = uint256(assets).mulDivDown(
+            supplyAfterRewards,
+            assetsAfterRewards
+        );
+        uint256 balanceBeforeDeposit = vault.balanceOf(receiver);
+
+        _getStkLYRA(address(this), assets);
+
+        stkLYRA.approve(address(vault), assets);
+
+        _checkDepositEvent(address(this), receiver, assets);
+
+        vault.deposit(assets, receiver);
+
+        assertEq(assetsAfterRewards + assets, vault.totalAssets());
+        assertEq(supplyAfterRewards + shares, vault.totalSupply());
+        assertEq(balanceBeforeDeposit + shares, vault.balanceOf(receiver));
     }
 }

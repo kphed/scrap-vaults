@@ -43,7 +43,6 @@ contract ScrapLyraVaultTest is Helper, ERC1155TokenReceiver {
     IGreekCache private constant GREEK_CACHE =
         IGreekCache(0x4b236Ac3B8d4666CbdC4E725C4366382AA30d86b);
 
-    bytes private constant UNAUTHORIZED_ERROR = bytes("UNAUTHORIZED");
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant VAULT_ROLE = keccak256("VAULT_ROLE");
 

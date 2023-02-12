@@ -13,6 +13,9 @@ interface IUSDC {
 }
 
 contract Helper is Test, Errors {
+    bytes internal constant UNAUTHORIZED_ERROR = bytes("UNAUTHORIZED");
+    bytes internal constant TRANSFER_FROM_FAILED_ERROR =
+        bytes("TRANSFER_FROM_FAILED");
     address internal constant USDC_ADDR =
         0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8;
     IUSDC internal constant _USDC = IUSDC(USDC_ADDR);
