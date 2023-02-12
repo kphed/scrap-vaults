@@ -8,14 +8,7 @@ import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {ReentrancyGuard} from "solmate/utils/ReentrancyGuard.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Errors} from "src/utils/Errors.sol";
-
-interface IstkLYRA {
-    function getTotalRewardsBalance(address) external view returns (uint256);
-
-    function claimRewards(address, uint256) external;
-
-    function stake(address, uint256) external;
-}
+import {IstkLYRA} from "src/interfaces/IstkLYRA.sol";
 
 contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
     using SafeTransferLib for ERC20;
@@ -35,7 +28,7 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
 
     address public liquidityPool;
 
-    event SetRewardFee(uint256);
+    event SetLiquidityFee(uint256);
     event SetLiquidityPool(address);
 
     constructor(
@@ -48,26 +41,8 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
             "wsLYRA"
         )
     {
+        // Pre-set an allowance to save gas and enable us to stake LYRA
         LYRA.safeApprove(address(STK_LYRA), type(uint256).max);
-    }
-
-    function setRewardFee(uint256 fee) external onlyOwner {
-        // If fee exceeds max, set it to the max fee
-        liquidityFee = fee > MAX_FEE ? MAX_FEE : fee;
-
-        emit SetRewardFee(fee);
-    }
-
-    function setLiquidityPool(address _liquidityPool) external onlyOwner {
-        if (_liquidityPool == address(0)) revert Zero();
-
-        liquidityPool = _liquidityPool;
-
-        emit SetLiquidityPool(_liquidityPool);
-    }
-
-    function totalAssets() public view override returns (uint256) {
-        return asset.balanceOf(address(this));
     }
 
     function _claimRewards() private {
@@ -86,9 +61,9 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         if (protocolRewards == 0) return;
 
         // Mint wsLYRA against the newly-claimed rewards, and add them to the liquidity pool
-        // If the pool has not been set, mint the shares for the owner instead (who can add liquidity later)
         _mint(
-            liquidityPool != address(0) ? liquidityPool : owner,
+            // No safety rails: it is on the owner to set a valid liquidity pool
+            liquidityPool,
             // Modified `convertToShares` logic with the assumption that totalSupply is
             // always non-zero, and with the reward fee amount deducted from assets after claim
             protocolRewards.mulDivDown(
@@ -98,8 +73,23 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         );
     }
 
-    function claimRewards() external nonReentrant {
-        _claimRewards();
+    function setLiquidityFee(uint256 _liquidityFee) external onlyOwner {
+        // If fee exceeds max, set it to the max fee
+        liquidityFee = _liquidityFee > MAX_FEE ? MAX_FEE : _liquidityFee;
+
+        emit SetLiquidityFee(_liquidityFee);
+    }
+
+    function setLiquidityPool(address _liquidityPool) external onlyOwner {
+        if (_liquidityPool == address(0)) revert Zero();
+
+        liquidityPool = _liquidityPool;
+
+        emit SetLiquidityPool(_liquidityPool);
+    }
+
+    function totalAssets() public view override returns (uint256) {
+        return asset.balanceOf(address(this));
     }
 
     function depositLYRA(
@@ -121,7 +111,9 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         uint256 assets = asset.balanceOf(address(this)) - assetsBeforeStaking;
 
         // Calculate shares using the total assets amount with the new assets deducted
-        uint256 shares = assets.mulDivDown(totalSupply, assetsBeforeStaking);
+        uint256 shares = totalSupply == 0
+            ? assets
+            : assets.mulDivDown(totalSupply, assetsBeforeStaking);
 
         _mint(receiver, shares);
 
@@ -216,5 +208,9 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         emit Withdraw(msg.sender, receiver, owner, assets, shares);
 
         asset.safeTransfer(receiver, assets);
+    }
+
+    function claimRewards() external nonReentrant {
+        _claimRewards();
     }
 }
