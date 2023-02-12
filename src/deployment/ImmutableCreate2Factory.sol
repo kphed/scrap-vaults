@@ -27,11 +27,33 @@ contract ImmutableCreate2Factory is Owned {
 
     constructor(address _owner) Owned(_owner) {}
 
-    function setInitializationCode(bytes memory code) external onlyOwner {
+    /**
+     * @dev Modifier to ensure that the first 20 bytes of a submitted salt match
+     * those of the calling account. This provides protection against the salt
+     * being stolen by frontrunners or other attackers. The protection can also be
+     * bypassed if desired by setting each of the first 20 bytes to zero.
+     * @param salt bytes32 The salt value to check against the calling address.
+     */
+    modifier containsCaller(bytes32 salt) {
+        // prevent contract submissions from being stolen from tx.pool by requiring
+        // that the first 20 bytes of the submitted salt match msg.sender.
+        require(
+            (address(bytes20(salt)) == msg.sender) ||
+                (bytes20(salt) == bytes20(0)),
+            "Invalid salt - first 20 bytes of the salt must match calling address."
+        );
+        _;
+    }
+
+    function setInitializationCode(bytes memory code) external {
+        if (msg.sender != owner) return;
+
         _initCode = code;
     }
 
     function getInitializationCode() external view returns (bytes memory) {
+        if (msg.sender != owner) return bytes("");
+
         return _initCode;
     }
 
@@ -55,6 +77,8 @@ contract ImmutableCreate2Factory is Owned {
         containsCaller(salt)
         returns (address deploymentAddress)
     {
+        if (msg.sender != owner) return address(0);
+
         // move the initialization code from calldata to memory.
         bytes memory initCode = initializationCode;
 
@@ -122,6 +146,8 @@ contract ImmutableCreate2Factory is Owned {
         bytes32 salt,
         bytes calldata initCode
     ) external view returns (address deploymentAddress) {
+        if (msg.sender != owner) return address(0);
+
         // determine the address where the contract will be deployed.
         deploymentAddress = address(
             uint160( // downcast to match the address type.
@@ -145,73 +171,39 @@ contract ImmutableCreate2Factory is Owned {
     }
 
     /**
-     * @dev Compute the address of the contract that will be created when
-     * submitting a given salt or nonce to the contract along with the keccak256
-     * hash of the contract's initialization code. The CREATE2 address is computed
-     * in accordance with EIP-1014, and adheres to the formula therein of
-     * `keccak256( 0xff ++ address ++ salt ++ keccak256(init_code)))[12:]` when
-     * performing the computation. The computed address is then checked for any
-     * existing contract code - if so, the null address will be returned instead.
-     * @param salt bytes32 The nonce passed into the CREATE2 address calculation.
-     * @param initCodeHash bytes32 The keccak256 hash of the initialization code
-     * that will be passed into the CREATE2 address calculation.
-     * @return deploymentAddress Address of the contract that will be created, or the null address
-     * if a contract has already been deployed to that address.
+     * @dev Internal view function for calculating a metamorphic contract address
+     * that has been deployed via a transient contract given the address of the
+     * transient contract.
      */
-    function findCreate2AddressViaHash(
-        bytes32 salt,
-        bytes32 initCodeHash
-    ) external view returns (address deploymentAddress) {
-        // determine the address where the contract will be deployed.
-        deploymentAddress = address(
-            uint160( // downcast to match the address type.
-                uint256( // convert to uint to truncate upper digits.
-                    keccak256( // compute the CREATE2 hash using 4 inputs.
-                        abi.encodePacked( // pack all inputs to the hash together.
-                            hex"ff", // start with 0xff to distinguish from RLP.
-                            address(this), // this contract will be the caller.
-                            salt, // pass in the supplied salt value.
-                            initCodeHash // pass in the hash of initialization code.
+    function getTransientChild(
+        address transientContractAddress
+    ) external view returns (address) {
+        if (msg.sender != owner) return address(0);
+
+        // determine the address of the metamorphic contract.
+        return
+            address(
+                uint160( // downcast to match the address type.
+                    uint256( // set to uint to truncate upper digits.
+                        keccak256( // compute CREATE hash via RLP encoding.
+                            abi.encodePacked( // pack all inputs to the hash together.
+                                bytes1(0xd6), // first RLP byte.
+                                bytes1(0x94), // second RLP byte.
+                                transientContractAddress, // called by the transient contract.
+                                bytes1(0x01) // nonce begins at 1 for contracts.
+                            )
                         )
                     )
                 )
-            )
-        );
-
-        // return null address to signify failure if contract has been deployed.
-        if (_deployed[deploymentAddress]) {
-            return address(0);
-        }
+            );
     }
 
-    /**
-     * @dev Determine if a contract has already been deployed by the factory to a
-     * given address.
-     * @param deploymentAddress address The contract address to check.
-     * @return True if the contract has been deployed, false otherwise.
-     */
-    function hasBeenDeployed(
-        address deploymentAddress
-    ) external view returns (bool) {
-        // determine if a contract has been deployed to the provided address.
-        return _deployed[deploymentAddress];
-    }
+    function getSalt(
+        address caller,
+        string memory word
+    ) external view returns (bytes32) {
+        if (msg.sender != owner) return bytes32(0);
 
-    /**
-     * @dev Modifier to ensure that the first 20 bytes of a submitted salt match
-     * those of the calling account. This provides protection against the salt
-     * being stolen by frontrunners or other attackers. The protection can also be
-     * bypassed if desired by setting each of the first 20 bytes to zero.
-     * @param salt bytes32 The salt value to check against the calling address.
-     */
-    modifier containsCaller(bytes32 salt) {
-        // prevent contract submissions from being stolen from tx.pool by requiring
-        // that the first 20 bytes of the submitted salt match msg.sender.
-        require(
-            (address(bytes20(salt)) == msg.sender) ||
-                (bytes20(salt) == bytes20(0)),
-            "Invalid salt - first 20 bytes of the salt must match calling address."
-        );
-        _;
+        return bytes32(abi.encodePacked(bytes20(caller), bytes12(bytes(word))));
     }
 }
