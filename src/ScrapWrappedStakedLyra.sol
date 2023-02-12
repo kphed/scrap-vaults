@@ -46,19 +46,17 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
     }
 
     function _claimRewards() private {
-        uint256 assetsBeforeClaim = asset.balanceOf(address(this));
-
-        STK_LYRA.claimRewards(address(this), type(uint256).max);
-
-        // Ensures that we are working with actual amount of rewards claimed
-        uint256 assetsAfterClaim = asset.balanceOf(address(this));
-        uint256 totalRewards = assetsAfterClaim - assetsBeforeClaim;
-        uint256 protocolRewards = totalRewards.mulDivDown(
+        uint256 claimableRewards = STK_LYRA.getTotalRewardsBalance(
+            address(this)
+        );
+        uint256 protocolRewards = claimableRewards.mulDivDown(
             liquidityFee,
             FEE_BASE
         );
 
         if (protocolRewards == 0) return;
+
+        STK_LYRA.claimRewards(address(this), claimableRewards);
 
         // Mint wsLYRA against the newly-claimed rewards, and add them to the liquidity pool
         _mint(
@@ -68,7 +66,7 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
             // always non-zero, and with the reward fee amount deducted from assets after claim
             protocolRewards.mulDivDown(
                 totalSupply,
-                assetsAfterClaim - protocolRewards
+                asset.balanceOf(address(this)) - protocolRewards
             )
         );
     }
@@ -90,6 +88,29 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
 
     function totalAssets() public view override returns (uint256) {
         return asset.balanceOf(address(this));
+    }
+
+    function totalsAfterRewards() external view returns (uint256, uint256) {
+        uint256 claimableRewards = STK_LYRA.getTotalRewardsBalance(
+            address(this)
+        );
+        uint256 supply = totalSupply;
+        uint256 assets = asset.balanceOf(address(this)) + claimableRewards;
+
+        if (claimableRewards == 0) return (supply, assets);
+
+        uint256 protocolRewards = claimableRewards.mulDivDown(
+            liquidityFee,
+            FEE_BASE
+        );
+
+        return (
+            // Total assets after reward claim
+            assets,
+            // Total supply after reward claim
+            supply +
+                protocolRewards.mulDivDown(supply, assets - protocolRewards)
+        );
     }
 
     function depositLYRA(
