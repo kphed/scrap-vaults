@@ -7,27 +7,32 @@ import {Owned} from "solmate/auth/Owned.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {ReentrancyGuard} from "solmate/utils/ReentrancyGuard.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
+import {Errors} from "src/utils/Errors.sol";
 
-interface IStkLyra {
+interface IstkLYRA {
     function getTotalRewardsBalance(address) external view returns (uint256);
 
     function claimRewards(address, uint256) external;
 }
 
-contract ScrapWrappedStakedLyra is ReentrancyGuard, Owned, ERC4626 {
+contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
     using SafeTransferLib for ERC20;
     using FixedPointMathLib for uint256;
 
-    IStkLyra public constant STK_LYRA =
-        IStkLyra(0xCb9f85730f57732fc899fb158164b9Ed60c77D49);
-
+    IstkLYRA public constant STK_LYRA =
+        IstkLYRA(0xCb9f85730f57732fc899fb158164b9Ed60c77D49);
     uint256 public constant FEE_BASE = 10_000;
+
+    // Maximum fee is 10% and can only be reduced from here
     uint256 public constant MAX_FEE = 1_000;
 
-    // All fees go directly to the wstkLYRA/LYRA liquidity pool
-    uint256 public REWARD_FEE = 500;
+    // All fees are added to the LYRA/wsLYRA liquidity pool
+    uint256 public liquidityFee = 1_000;
+
+    address public liquidityPool;
 
     event SetRewardFee(uint256);
+    event SetLiquidityPool(address);
 
     constructor(
         address _owner
@@ -35,16 +40,24 @@ contract ScrapWrappedStakedLyra is ReentrancyGuard, Owned, ERC4626 {
         Owned(_owner)
         ERC4626(
             ERC20(address(STK_LYRA)),
-            "Scrap.sh | Wrapped Staked Lyra",
-            "wstkLYRA"
+            "Scrap.sh Wrapped Staked LYRA",
+            "wsLYRA"
         )
     {}
 
     function setRewardFee(uint256 fee) external onlyOwner {
         // If fee exceeds max, set it to the max fee
-        REWARD_FEE = fee > MAX_FEE ? MAX_FEE : fee;
+        liquidityFee = fee > MAX_FEE ? MAX_FEE : fee;
 
         emit SetRewardFee(fee);
+    }
+
+    function setLiquidityPool(address _liquidityPool) external onlyOwner {
+        if (_liquidityPool == address(0)) revert Zero();
+
+        liquidityPool = _liquidityPool;
+
+        emit SetLiquidityPool(_liquidityPool);
     }
 
     function totalAssets() public view override returns (uint256) {
@@ -52,24 +65,31 @@ contract ScrapWrappedStakedLyra is ReentrancyGuard, Owned, ERC4626 {
     }
 
     function _claimRewards() private {
-        uint256 rewards = STK_LYRA.getTotalRewardsBalance(address(this));
+        uint256 assetsBeforeClaim = asset.balanceOf(address(this));
 
-        STK_LYRA.claimRewards(address(this), rewards);
+        STK_LYRA.claimRewards(address(this), type(uint256).max);
 
-        uint256 rewardFee = rewards.mulDivDown(REWARD_FEE, FEE_BASE);
-
-        if (rewardFee == 0) return;
-
-        // Mint wstkLYRA against the newly-claimed rewards, and add them to the LP
-        _mint(
-            address(this),
-            // Modified `convertToShares` logic with the assumption that totalSupply is
-            // always non-zero, and with the reward fee amount deducted from total assets
-            rewardFee.mulDivDown(totalSupply, totalAssets() - rewardFee)
+        // Ensures that we are working with actual amount of rewards claimed
+        uint256 assetsAfterClaim = asset.balanceOf(address(this));
+        uint256 totalRewards = assetsAfterClaim - assetsBeforeClaim;
+        uint256 protocolRewards = totalRewards.mulDivDown(
+            liquidityFee,
+            FEE_BASE
         );
 
-        // TODO: Add liquidity to the LP, transfer LP tokens to the owner
-        // TODO: Max approve wstkLYRA @ the LP contract
+        if (protocolRewards == 0) return;
+
+        // Mint wsLYRA against the newly-claimed rewards, and add them to the liquidity pool
+        // If the pool has not been set, mint the shares for the owner instead (who can add liquidity later)
+        _mint(
+            liquidityPool != address(0) ? liquidityPool : owner,
+            // Modified `convertToShares` logic with the assumption that totalSupply is
+            // always non-zero, and with the reward fee amount deducted from assets after claim
+            protocolRewards.mulDivDown(
+                totalSupply,
+                assetsAfterClaim - protocolRewards
+            )
+        );
     }
 
     function claimRewards() external nonReentrant {
