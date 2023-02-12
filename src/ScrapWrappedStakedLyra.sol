@@ -163,7 +163,7 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         uint256 shares,
         address receiver
     ) public override nonReentrant returns (uint256 assets) {
-        if (assets == 0) revert Zero();
+        if (shares == 0) revert Zero();
         if (receiver == address(0)) revert Zero();
 
         _claimRewards();
@@ -209,7 +209,7 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         address receiver,
         address owner
     ) public override nonReentrant returns (uint256 assets) {
-        if (assets == 0) revert Zero();
+        if (shares == 0) revert Zero();
         if (receiver == address(0)) revert Zero();
         if (owner == address(0)) revert Zero();
 

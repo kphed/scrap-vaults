@@ -142,7 +142,7 @@ contract ScrapWrappedStakedLyraTest is Helper {
         (uint256 assetsAfter, uint256 supplyAfter) = vault.totalsAfterRewards();
         uint256 assets = supplyAfter == 0
             ? amount
-            : amount.mulDivDown(assetsAfter, supplyAfter);
+            : amount.mulDivUp(assetsAfter, supplyAfter);
 
         _getStkLYRA(to, assets);
 
@@ -431,5 +431,98 @@ contract ScrapWrappedStakedLyraTest is Helper {
         assertEq(assetsAfterRewards + assets, vault.totalAssets());
         assertEq(supplyAfterRewards + shares, vault.totalSupply());
         assertEq(balanceBeforeDeposit + shares, vault.balanceOf(receiver));
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                mint TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    function testCannotMintZeroAmount() external {
+        uint256 shares = 0;
+        address receiver = address(this);
+
+        vm.expectRevert(Zero.selector);
+
+        vault.mint(shares, receiver);
+    }
+
+    function testCannotMintZeroAddress() external {
+        uint256 shares = 1e18;
+        address receiver = address(0);
+
+        vm.expectRevert(Zero.selector);
+
+        vault.mint(shares, receiver);
+    }
+
+    function testCannotMintInsufficientBalance() external {
+        uint256 shares = 1e18;
+        address receiver = address(this);
+        (uint256 assetsAfterRewards, uint256 supplyAfterRewards) = vault
+            .totalsAfterRewards();
+
+        // Get the amount of necessary assets minus 1 (ensuring the error is triggered)
+        uint256 assets = shares.mulDivUp(
+            assetsAfterRewards,
+            supplyAfterRewards
+        ) - 10;
+
+        _getStkLYRA(address(this), assets);
+
+        stkLYRA.approve(address(vault), assets);
+
+        vm.expectRevert(TRANSFER_FROM_FAILED_ERROR);
+
+        vault.mint(shares, receiver);
+    }
+
+    function testMint() external {
+        uint256 shares = 1e18;
+        address receiver = address(this);
+        (uint256 assetsAfterRewards, uint256 supplyAfterRewards) = vault
+            .totalsAfterRewards();
+        uint256 assets = shares.mulDivUp(
+            assetsAfterRewards,
+            supplyAfterRewards
+        );
+        uint256 balanceBeforeMint = vault.balanceOf(receiver);
+
+        _getStkLYRA(address(this), assets);
+
+        stkLYRA.approve(address(vault), assets);
+
+        _checkDepositEvent(address(this), receiver, assets);
+
+        vault.mint(shares, receiver);
+
+        assertEq(assetsAfterRewards + assets, vault.totalAssets());
+        assertEq(supplyAfterRewards + shares, vault.totalSupply());
+        assertEq(balanceBeforeMint + shares, vault.balanceOf(receiver));
+    }
+
+    function testMintFuzz(uint88 shares, bool separateReceiver) external {
+        vm.assume(shares > 1e9);
+        vm.assume(shares < 10_000_000e18);
+
+        address receiver = separateReceiver ? testAcc[0] : address(this);
+        (uint256 assetsAfterRewards, uint256 supplyAfterRewards) = vault
+            .totalsAfterRewards();
+        uint256 assets = uint256(shares).mulDivUp(
+            assetsAfterRewards,
+            supplyAfterRewards
+        );
+        uint256 balanceBeforeMint = vault.balanceOf(receiver);
+
+        _getStkLYRA(address(this), assets);
+
+        stkLYRA.approve(address(vault), assets);
+
+        _checkDepositEvent(address(this), receiver, assets);
+
+        vault.mint(shares, receiver);
+
+        assertEq(assetsAfterRewards + assets, vault.totalAssets());
+        assertEq(supplyAfterRewards + shares, vault.totalSupply());
+        assertEq(balanceBeforeMint + shares, vault.balanceOf(receiver));
     }
 }
