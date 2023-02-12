@@ -100,6 +100,9 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         uint256 assets,
         address receiver
     ) public override nonReentrant returns (uint256 shares) {
+        if (assets == 0) revert Zero();
+        if (receiver == address(0)) revert Zero();
+
         _claimRewards();
 
         require((shares = previewDeposit(assets)) != 0, "ZERO_SHARES");
@@ -115,6 +118,9 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         uint256 shares,
         address receiver
     ) public override nonReentrant returns (uint256 assets) {
+        if (assets == 0) revert Zero();
+        if (receiver == address(0)) revert Zero();
+
         _claimRewards();
 
         assets = previewMint(shares);
@@ -131,6 +137,10 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         address receiver,
         address owner
     ) public override nonReentrant returns (uint256 shares) {
+        if (assets == 0) revert Zero();
+        if (receiver == address(0)) revert Zero();
+        if (owner == address(0)) revert Zero();
+
         _claimRewards();
 
         shares = previewWithdraw(assets);
@@ -154,6 +164,10 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         address receiver,
         address owner
     ) public override nonReentrant returns (uint256 assets) {
+        if (assets == 0) revert Zero();
+        if (receiver == address(0)) revert Zero();
+        if (owner == address(0)) revert Zero();
+
         _claimRewards();
 
         if (msg.sender != owner) {
