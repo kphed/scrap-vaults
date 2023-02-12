@@ -56,11 +56,11 @@ contract ScrapWrappedStakedLyra is ReentrancyGuard, Owned, ERC4626 {
 
         STK_LYRA.claimRewards(address(this), rewards);
 
-        // Mint wstkLYRA against the newly-claimed rewards, and add them to the LP
         uint256 rewardFee = rewards.mulDivDown(REWARD_FEE, FEE_BASE);
 
         if (rewardFee == 0) return;
 
+        // Mint wstkLYRA against the newly-claimed rewards, and add them to the LP
         _mint(
             address(this),
             // Modified `convertToShares` logic with the assumption that totalSupply is
@@ -82,10 +82,8 @@ contract ScrapWrappedStakedLyra is ReentrancyGuard, Owned, ERC4626 {
     ) public override nonReentrant returns (uint256 shares) {
         _claimRewards();
 
-        // Check for rounding error since we round down in previewDeposit.
         require((shares = previewDeposit(assets)) != 0, "ZERO_SHARES");
 
-        // Need to transfer before minting or ERC777s could reenter.
         asset.safeTransferFrom(msg.sender, address(this), assets);
 
         _mint(receiver, shares);
@@ -99,9 +97,8 @@ contract ScrapWrappedStakedLyra is ReentrancyGuard, Owned, ERC4626 {
     ) public override nonReentrant returns (uint256 assets) {
         _claimRewards();
 
-        assets = previewMint(shares); // No need to check for rounding error, previewMint rounds up.
+        assets = previewMint(shares);
 
-        // Need to transfer before minting or ERC777s could reenter.
         asset.safeTransferFrom(msg.sender, address(this), assets);
 
         _mint(receiver, shares);
@@ -116,10 +113,10 @@ contract ScrapWrappedStakedLyra is ReentrancyGuard, Owned, ERC4626 {
     ) public override nonReentrant returns (uint256 shares) {
         _claimRewards();
 
-        shares = previewWithdraw(assets); // No need to check for rounding error, previewWithdraw rounds up.
+        shares = previewWithdraw(assets);
 
         if (msg.sender != owner) {
-            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+            uint256 allowed = allowance[owner][msg.sender];
 
             if (allowed != type(uint256).max)
                 allowance[owner][msg.sender] = allowed - shares;
@@ -140,13 +137,12 @@ contract ScrapWrappedStakedLyra is ReentrancyGuard, Owned, ERC4626 {
         _claimRewards();
 
         if (msg.sender != owner) {
-            uint256 allowed = allowance[owner][msg.sender]; // Saves gas for limited approvals.
+            uint256 allowed = allowance[owner][msg.sender];
 
             if (allowed != type(uint256).max)
                 allowance[owner][msg.sender] = allowed - shares;
         }
 
-        // Check for rounding error since we round down in previewRedeem.
         require((assets = previewRedeem(shares)) != 0, "ZERO_ASSETS");
 
         _burn(owner, shares);
