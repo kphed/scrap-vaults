@@ -8,10 +8,7 @@ pragma solidity 0.8.18;
  * the metamorphic contract.
  */
 interface FactoryInterface {
-    function getInitializationCode()
-        external
-        view
-        returns (bytes memory initializationCode);
+    function getInitializationCode() external view returns (bytes memory);
 }
 
 /**
