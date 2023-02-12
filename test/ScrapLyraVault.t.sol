@@ -58,13 +58,6 @@ contract ScrapLyraVaultTest is Helper, ERC1155TokenReceiver {
     ScrapLyraVaultShareERC1155 private immutable depositShare;
     ScrapLyraVaultShareERC1155 private immutable withdrawShare;
     address private immutable vaultAddr;
-    uint256 private immutable testAccLen;
-
-    address[] private testAcc = [
-        0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,
-        0x70997970C51812dc3A010C7d01b50e0d17dc79C8,
-        0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
-    ];
 
     event Deposit(
         address indexed msgSender,
@@ -85,7 +78,6 @@ contract ScrapLyraVaultTest is Helper, ERC1155TokenReceiver {
         depositShare = vault.depositShare();
         withdrawShare = vault.withdrawShare();
         vaultAddr = address(vault);
-        testAccLen = testAcc.length;
     }
 
     function _processDepositQueue() private {
