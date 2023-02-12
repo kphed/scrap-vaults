@@ -13,8 +13,11 @@ import {ICryptoPool} from "test/interfaces/ICryptoPool.sol";
 contract ScrapWrappedStakedLyraTest is Helper {
     using FixedPointMathLib for uint256;
 
-    ICurveFactory private constant curveFactory =
+    ICurveFactory private constant CURVE_FACTORY =
         ICurveFactory(0xF18056Bbd320E96A48e3Fbf8bC061322531aac99);
+
+    address private constant PURGE_ADDRESS =
+        0x000000000000000000000000000000000000dEaD;
 
     ScrapWrappedStakedLyra private immutable vault =
         new ScrapWrappedStakedLyra(address(this));
@@ -29,6 +32,13 @@ contract ScrapWrappedStakedLyraTest is Helper {
         uint256 assets,
         uint256 shares
     );
+    event Withdraw(
+        address indexed caller,
+        address indexed receiver,
+        address indexed owner,
+        uint256 assets,
+        uint256 shares
+    );
     event SetLiquidityFee(uint256);
     event SetLiquidityPool(address);
 
@@ -39,7 +49,7 @@ contract ScrapWrappedStakedLyraTest is Helper {
         ];
 
         vault.setLiquidityPool(
-            curveFactory.deploy_pool(
+            CURVE_FACTORY.deploy_pool(
                 "Curve.fi LYRA/wsLYRA",
                 "wsLYRACRV",
                 coins,
@@ -63,6 +73,11 @@ contract ScrapWrappedStakedLyraTest is Helper {
         _seedVault();
         _seedPool();
         _provisionVault();
+
+        // PURGE BALANCES
+        vault.transfer(PURGE_ADDRESS, vault.balanceOf(address(this)));
+        stkLYRA.transfer(PURGE_ADDRESS, stkLYRA.balanceOf(address(this)));
+        lyra.transfer(PURGE_ADDRESS, lyra.balanceOf(address(this)));
     }
 
     function _seedVault() private {
@@ -124,25 +139,90 @@ contract ScrapWrappedStakedLyraTest is Helper {
         vm.stopPrank();
     }
 
+    function _convertToSharesAfterRewards(
+        uint256 assets
+    ) private view returns (uint256) {
+        (uint256 assetsAfter, uint256 supplyAfter) = vault.totalsAfterRewards();
+
+        return assets.mulDivDown(supplyAfter, assetsAfter);
+    }
+
+    function _convertToAssetsAfterRewards(
+        uint256 shares
+    ) private view returns (uint256) {
+        (uint256 assetsAfter, uint256 supplyAfter) = vault.totalsAfterRewards();
+
+        return shares.mulDivDown(assetsAfter, supplyAfter);
+    }
+
+    function _previewDepositAfterRewards(
+        uint256 shares
+    ) private view returns (uint256) {
+        return _convertToSharesAfterRewards(shares);
+    }
+
+    function _previewMintAfterRewards(
+        uint256 shares
+    ) private view returns (uint256) {
+        (uint256 assetsAfter, uint256 supplyAfter) = vault.totalsAfterRewards();
+
+        return shares.mulDivUp(assetsAfter, supplyAfter);
+    }
+
+    function _previewWithdrawAfterRewards(
+        uint256 assets
+    ) private view returns (uint256) {
+        (uint256 assetsAfter, uint256 supplyAfter) = vault.totalsAfterRewards();
+
+        return assets.mulDivUp(supplyAfter, assetsAfter);
+    }
+
+    function _previewRedeemAfterRewards(
+        uint256 shares
+    ) private view returns (uint256) {
+        return _convertToAssetsAfterRewards(shares);
+    }
+
     function _checkDepositEvent(
         address caller,
         address owner,
         uint256 assets
     ) private {
-        (uint256 assetsAfter, uint256 supplyAfter) = vault.totalsAfterRewards();
-        uint256 shares = assets.mulDivDown(supplyAfter, assetsAfter);
+        uint256 shares = _previewDepositAfterRewards(assets);
 
         vm.expectEmit(true, true, false, true, address(vault));
 
         emit Deposit(caller, owner, assets, shares);
     }
 
+    function _checkMintEvent(
+        address caller,
+        address owner,
+        uint256 shares
+    ) private {
+        uint256 assets = _previewMintAfterRewards(shares);
+
+        vm.expectEmit(true, true, false, true, address(vault));
+
+        emit Deposit(caller, owner, assets, shares);
+    }
+
+    function _checkWithdrawEvent(
+        address caller,
+        address receiver,
+        address owner,
+        uint256 assets
+    ) private {
+        uint256 shares = _previewWithdrawAfterRewards(assets);
+
+        vm.expectEmit(true, true, true, true, address(vault));
+
+        emit Withdraw(caller, receiver, owner, assets, shares);
+    }
+
     function _getWStkLYRA(address to, uint256 amount) private {
         uint256 balanceBefore = vault.balanceOf(to);
-        (uint256 assetsAfter, uint256 supplyAfter) = vault.totalsAfterRewards();
-        uint256 assets = supplyAfter == 0
-            ? amount
-            : amount.mulDivUp(assetsAfter, supplyAfter);
+        uint256 assets = _convertToAssetsAfterRewards(amount);
 
         _getStkLYRA(to, assets);
 
@@ -300,10 +380,7 @@ contract ScrapWrappedStakedLyraTest is Helper {
         address receiver = address(this);
         (uint256 assetsAfterRewards, uint256 supplyAfterRewards) = vault
             .totalsAfterRewards();
-        uint256 shares = amount.mulDivDown(
-            supplyAfterRewards,
-            assetsAfterRewards
-        );
+        uint256 shares = _previewDepositAfterRewards(amount);
         uint256 balanceBeforeDeposit = vault.balanceOf(receiver);
 
         _getLYRA(address(this), amount);
@@ -329,10 +406,7 @@ contract ScrapWrappedStakedLyraTest is Helper {
         address receiver = separateReceiver ? testAcc[0] : address(this);
         (uint256 assetsAfterRewards, uint256 supplyAfterRewards) = vault
             .totalsAfterRewards();
-        uint256 shares = uint256(amount).mulDivDown(
-            supplyAfterRewards,
-            assetsAfterRewards
-        );
+        uint256 shares = _previewDepositAfterRewards(amount);
         uint256 balanceBeforeDeposit = vault.balanceOf(receiver);
 
         _getLYRA(address(this), amount);
@@ -388,10 +462,7 @@ contract ScrapWrappedStakedLyraTest is Helper {
         address receiver = address(this);
         (uint256 assetsAfterRewards, uint256 supplyAfterRewards) = vault
             .totalsAfterRewards();
-        uint256 shares = assets.mulDivDown(
-            supplyAfterRewards,
-            assetsAfterRewards
-        );
+        uint256 shares = _previewDepositAfterRewards(assets);
         uint256 balanceBeforeDeposit = vault.balanceOf(receiver);
 
         _getStkLYRA(address(this), assets);
@@ -414,10 +485,7 @@ contract ScrapWrappedStakedLyraTest is Helper {
         address receiver = separateReceiver ? testAcc[0] : address(this);
         (uint256 assetsAfterRewards, uint256 supplyAfterRewards) = vault
             .totalsAfterRewards();
-        uint256 shares = uint256(assets).mulDivDown(
-            supplyAfterRewards,
-            assetsAfterRewards
-        );
+        uint256 shares = _previewDepositAfterRewards(assets);
         uint256 balanceBeforeDeposit = vault.balanceOf(receiver);
 
         _getStkLYRA(address(this), assets);
@@ -458,14 +526,9 @@ contract ScrapWrappedStakedLyraTest is Helper {
     function testCannotMintInsufficientBalance() external {
         uint256 shares = 1e18;
         address receiver = address(this);
-        (uint256 assetsAfterRewards, uint256 supplyAfterRewards) = vault
-            .totalsAfterRewards();
 
         // Get the amount of necessary assets minus 1 (ensuring the error is triggered)
-        uint256 assets = shares.mulDivUp(
-            assetsAfterRewards,
-            supplyAfterRewards
-        ) - 10;
+        uint256 assets = _previewMintAfterRewards(shares) - 1;
 
         _getStkLYRA(address(this), assets);
 
@@ -481,17 +544,14 @@ contract ScrapWrappedStakedLyraTest is Helper {
         address receiver = address(this);
         (uint256 assetsAfterRewards, uint256 supplyAfterRewards) = vault
             .totalsAfterRewards();
-        uint256 assets = shares.mulDivUp(
-            assetsAfterRewards,
-            supplyAfterRewards
-        );
+        uint256 assets = _previewMintAfterRewards(shares);
         uint256 balanceBeforeMint = vault.balanceOf(receiver);
 
         _getStkLYRA(address(this), assets);
 
         stkLYRA.approve(address(vault), assets);
 
-        _checkDepositEvent(address(this), receiver, assets);
+        _checkMintEvent(address(this), receiver, shares);
 
         vault.mint(shares, receiver);
 
@@ -507,22 +567,149 @@ contract ScrapWrappedStakedLyraTest is Helper {
         address receiver = separateReceiver ? testAcc[0] : address(this);
         (uint256 assetsAfterRewards, uint256 supplyAfterRewards) = vault
             .totalsAfterRewards();
-        uint256 assets = uint256(shares).mulDivUp(
-            assetsAfterRewards,
-            supplyAfterRewards
-        );
+        uint256 assets = _previewMintAfterRewards(shares);
         uint256 balanceBeforeMint = vault.balanceOf(receiver);
 
         _getStkLYRA(address(this), assets);
 
         stkLYRA.approve(address(vault), assets);
 
-        _checkDepositEvent(address(this), receiver, assets);
+        _checkMintEvent(address(this), receiver, shares);
 
         vault.mint(shares, receiver);
 
         assertEq(assetsAfterRewards + assets, vault.totalAssets());
         assertEq(supplyAfterRewards + shares, vault.totalSupply());
         assertEq(balanceBeforeMint + shares, vault.balanceOf(receiver));
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            withdraw TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    function testCannotWithdrawZeroAmount() external {
+        uint256 assets = 0;
+        address receiver = address(this);
+        address owner = address(this);
+
+        vm.expectRevert(Zero.selector);
+
+        vault.withdraw(assets, receiver, owner);
+    }
+
+    function testCannotWithdrawReceiverZeroAddress() external {
+        uint256 assets = 1e18;
+        address receiver = address(0);
+        address owner = address(this);
+
+        vm.expectRevert(Zero.selector);
+
+        vault.withdraw(assets, receiver, owner);
+    }
+
+    function testCannotWithdrawOwnerZeroAddress() external {
+        uint256 assets = 1e18;
+        address receiver = address(this);
+        address owner = address(0);
+
+        vm.expectRevert(Zero.selector);
+
+        vault.withdraw(assets, receiver, owner);
+    }
+
+    function testCannotWithdrawInsufficientBalance() external {
+        uint256 assets = 1e18;
+        address receiver = testAcc[0];
+        address owner = address(this);
+
+        _getStkLYRA(address(this), assets);
+
+        stkLYRA.approve(address(vault), assets);
+
+        vault.deposit(assets, owner);
+
+        // Get the asset amount which can be withdrawn from owner shares with 1
+        // additional to trigger an arithmetic underflow error (due to insufficient shares)
+        uint256 excessiveAssets = _convertToAssetsAfterRewards(
+            vault.balanceOf(owner)
+        ) + 1;
+
+        vm.expectRevert(stdError.arithmeticError);
+
+        vault.withdraw(excessiveAssets, receiver, owner);
+    }
+
+    function testWithdraw() external {
+        uint256 assets = 1e18;
+        address receiver = testAcc[0];
+        address owner = address(this);
+
+        // Purge balances
+        vm.startPrank(receiver);
+
+        stkLYRA.transfer(PURGE_ADDRESS, stkLYRA.balanceOf(receiver));
+
+        vm.stopPrank();
+
+        _getStkLYRA(address(this), assets);
+
+        stkLYRA.approve(address(vault), assets);
+
+        vault.deposit(assets, owner);
+
+        // Add variance with random deposits + timestamp forwarding to improve test rigor
+        _provisionVault();
+
+        (uint256 assetsAfterRewards, uint256 supplyAfterRewards) = vault
+            .totalsAfterRewards();
+        uint256 shares = vault.balanceOf(owner);
+        uint256 withdrawableAssets = _convertToAssetsAfterRewards(shares);
+
+        _checkWithdrawEvent(owner, receiver, owner, withdrawableAssets);
+
+        vault.withdraw(withdrawableAssets, receiver, owner);
+
+        assertEq(assetsAfterRewards - withdrawableAssets, vault.totalAssets());
+        assertEq(supplyAfterRewards - shares, vault.totalSupply());
+        assertEq(0, vault.balanceOf(owner));
+        assertEq(withdrawableAssets, stkLYRA.balanceOf(receiver));
+    }
+
+    function testWithdrawFuzz(uint88 assets, bool separateReceiver) external {
+        vm.assume(assets > 1e9);
+        vm.assume(assets < 10_000_000e18);
+
+        address receiver = separateReceiver ? testAcc[0] : address(this);
+        address owner = address(this);
+
+        // Purge balances
+        vm.startPrank(receiver);
+
+        stkLYRA.transfer(PURGE_ADDRESS, stkLYRA.balanceOf(receiver));
+
+        vm.stopPrank();
+
+        _getStkLYRA(address(this), assets);
+
+        stkLYRA.approve(address(vault), assets);
+
+        vault.deposit(assets, owner);
+
+        // Add variance with random deposits + timestamp forwarding to improve test rigor
+        _provisionVault();
+
+        (uint256 assetsAfterRewards, uint256 supplyAfterRewards) = vault
+            .totalsAfterRewards();
+        uint256 shares = vault.balanceOf(owner);
+        uint256 withdrawableAssets = _convertToAssetsAfterRewards(shares);
+
+        _checkWithdrawEvent(owner, receiver, owner, withdrawableAssets);
+
+        vault.withdraw(withdrawableAssets, receiver, owner);
+
+        assertEq(assetsAfterRewards - withdrawableAssets, vault.totalAssets());
+        assertEq(supplyAfterRewards - shares, vault.totalSupply());
+        assertEq(0, vault.balanceOf(owner));
+        assertEq(withdrawableAssets, stkLYRA.balanceOf(receiver));
     }
 }

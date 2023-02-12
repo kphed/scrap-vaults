@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.18;
 
+import "forge-std/Test.sol";
+
 import {ERC4626} from "solmate/mixins/ERC4626.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {Owned} from "solmate/auth/Owned.sol";
@@ -90,27 +92,29 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         return asset.balanceOf(address(this));
     }
 
-    function totalsAfterRewards() external view returns (uint256, uint256) {
+    function totalsAfterRewards()
+        external
+        view
+        returns (uint256 assets, uint256 supply)
+    {
+        assets = asset.balanceOf(address(this));
+        supply = totalSupply;
         uint256 claimableRewards = STK_LYRA.getTotalRewardsBalance(
             address(this)
         );
-        uint256 supply = totalSupply;
-        uint256 assets = asset.balanceOf(address(this)) + claimableRewards;
 
-        if (claimableRewards == 0) return (supply, assets);
+        if (claimableRewards == 0) return (assets, supply);
+
+        // Include claimable rewards in the total asset amount
+        assets += claimableRewards;
 
         uint256 protocolRewards = claimableRewards.mulDivDown(
             liquidityFee,
             FEE_BASE
         );
 
-        return (
-            // Total assets after reward claim
-            assets,
-            // Total supply after reward claim
-            supply +
-                protocolRewards.mulDivDown(supply, assets - protocolRewards)
-        );
+        // Include the shares minted against the liquidity fee in the total supply amount
+        supply += protocolRewards.mulDivDown(supply, assets - protocolRewards);
     }
 
     function depositLYRA(
