@@ -13,6 +13,8 @@ interface IstkLYRA {
     function getTotalRewardsBalance(address) external view returns (uint256);
 
     function claimRewards(address, uint256) external;
+
+    function stake(address, uint256) external;
 }
 
 contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
@@ -21,6 +23,8 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
 
     IstkLYRA public constant STK_LYRA =
         IstkLYRA(0xCb9f85730f57732fc899fb158164b9Ed60c77D49);
+    ERC20 public constant LYRA =
+        ERC20(0x01BA67AAC7f75f647D94220Cc98FB30FCc5105Bf);
     uint256 public constant FEE_BASE = 10_000;
 
     // Maximum fee is 10% and can only be reduced from here
@@ -43,7 +47,9 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
             "Scrap.sh Wrapped Staked LYRA",
             "wsLYRA"
         )
-    {}
+    {
+        LYRA.safeApprove(address(STK_LYRA), type(uint256).max);
+    }
 
     function setRewardFee(uint256 fee) external onlyOwner {
         // If fee exceeds max, set it to the max fee
@@ -94,6 +100,32 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
 
     function claimRewards() external nonReentrant {
         _claimRewards();
+    }
+
+    function depositLYRA(
+        uint256 amount,
+        address receiver
+    ) external nonReentrant {
+        if (amount == 0) revert Zero();
+        if (receiver == address(0)) revert Zero();
+
+        _claimRewards();
+
+        LYRA.safeTransferFrom(msg.sender, address(this), amount);
+
+        uint256 assetsBeforeStaking = asset.balanceOf(address(this));
+
+        STK_LYRA.stake(address(this), amount);
+
+        // Calculate the exact amount of stkLYRA deposited by msg.sender
+        uint256 assets = asset.balanceOf(address(this)) - assetsBeforeStaking;
+
+        // Calculate shares using the total assets amount with the new assets deducted
+        uint256 shares = assets.mulDivDown(totalSupply, assetsBeforeStaking);
+
+        _mint(receiver, shares);
+
+        emit Deposit(msg.sender, receiver, assets, shares);
     }
 
     function deposit(
