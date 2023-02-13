@@ -900,4 +900,54 @@ contract ScrapWrappedStakedLyraTest is Helper {
         assertEq(0, vault.balanceOf(owner));
         assertEq(withdrawableAssets, stkLYRA.balanceOf(receiver));
     }
+
+    /*//////////////////////////////////////////////////////////////
+                            claimRewards TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    function testClaimRewardsFuzz(uint16 additionalTime) external {
+        _addVaultAssets();
+
+        vm.warp(block.timestamp + additionalTime);
+
+        IstkLYRA asset = IstkLYRA(address(stkLYRA));
+        uint256 totalAssetsBeforeRewards = vault.totalAssets();
+        uint256 totalSupplyBeforeRewards = vault.totalSupply();
+        uint256 claimableRewards = asset.getTotalRewardsBalance(address(vault));
+        uint256 liquidityFeeRewards = claimableRewards.mulDivDown(
+            vault.liquidityFee(),
+            vault.FEE_BASE()
+        );
+        uint256 liquidityFeeShares = liquidityFeeRewards.mulDivDown(
+            totalSupplyBeforeRewards,
+            (totalAssetsBeforeRewards + claimableRewards) - liquidityFeeRewards
+        );
+        (
+            uint256 totalAssetsAfterRewards,
+            uint256 totalSupplyAfterRewards
+        ) = vault.totalsAfterRewards();
+
+        vm.expectEmit(false, false, false, true, address(vault));
+
+        emit ClaimRewards(
+            claimableRewards,
+            liquidityFeeRewards,
+            liquidityFeeShares
+        );
+
+        vault.claimRewards();
+
+        uint256 totalAssets = vault.totalAssets();
+        uint256 totalSupply = vault.totalSupply();
+
+        assertEq(totalAssetsBeforeRewards + claimableRewards, totalAssets);
+        assertEq(totalSupplyBeforeRewards + liquidityFeeShares, totalSupply);
+        assertEq(totalAssetsAfterRewards, totalAssets);
+        assertEq(totalSupplyAfterRewards, totalSupply);
+
+        vault.claimRewards();
+
+        assertEq(totalAssets, vault.totalAssets());
+        assertEq(totalSupply, vault.totalSupply());
+    }
 }
