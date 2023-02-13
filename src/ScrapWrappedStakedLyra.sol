@@ -34,12 +34,18 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
     // aimed at mitigating front or back-running and with improved slippage control
     address public liquidityProvider;
 
-    event SetLiquidityFee(uint256);
-    event SetLiquidityPool(address);
-    event SetLiquidityProvider(address);
+    event SetLiquidityFee(uint256 liquidityFee);
+    event SetLiquidityPool(address liquidityPool);
+    event SetLiquidityProvider(address liquidityProvider);
+    event ClaimRewards(
+        uint256 claimableRewards,
+        uint256 protocolRewards,
+        uint256 liquidityShares
+    );
 
     constructor(
-        address _owner
+        address _owner,
+        address _liquidityProvider
     )
         Owned(_owner)
         ERC4626(
@@ -48,11 +54,13 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
             "wsLYRA"
         )
     {
+        if (_owner == address(0)) revert Zero();
+        if (_liquidityProvider == address(0)) revert Zero();
+
         // Pre-set an allowance to save gas and enable us to stake LYRA
         LYRA.safeApprove(address(STK_LYRA), type(uint256).max);
 
-        // Initially set to the contract owner until the liquidityProvider contract is complete
-        liquidityProvider = owner;
+        liquidityProvider = _liquidityProvider;
     }
 
     function _claimRewards() private {
@@ -68,24 +76,26 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
 
         STK_LYRA.claimRewards(address(this), claimableRewards);
 
+        // Modified `convertToShares` logic with the liquidity fee deducted from assets
+        uint256 liquidityShares = protocolRewards.mulDivDown(
+            totalSupply,
+            asset.balanceOf(address(this)) - protocolRewards
+        );
+
         // Mint wsLYRA against the newly-claimed rewards, and add them to the liquidity pool
         _mint(
-            // Mint wslYRA for the liquidity provider, who will add it to the LP. Initially,
-            // this will be done manually by the owner, but will be replaced by a contract
+            // Mint wslYRA for the liquidity provider, who will add it to the LP
             liquidityProvider,
-            // Modified `convertToShares` logic with the assumption that totalSupply is
-            // always non-zero, and with the reward fee amount deducted from assets after claim
-            protocolRewards.mulDivDown(
-                totalSupply,
-                asset.balanceOf(address(this)) - protocolRewards
-            )
+            liquidityShares
         );
+
+        emit ClaimRewards(claimableRewards, protocolRewards, liquidityShares);
     }
 
     /**
      * Set the liquidity fee
      *
-     * @param _liquidityFee  uint256  Liquidity fee in BPS
+     * @param  _liquidityFee  uint256  Liquidity fee in BPS
      */
     function setLiquidityFee(uint256 _liquidityFee) external onlyOwner {
         // If fee exceeds max, set it to the max fee
@@ -97,7 +107,7 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
     /**
      * Set the liquidity pool
      *
-     * @param _liquidityPool  address  LYRA/wsLYRA LP contract address
+     * @param  _liquidityPool  address  LYRA/wsLYRA LP contract address
      */
     function setLiquidityPool(address _liquidityPool) external onlyOwner {
         if (_liquidityPool == address(0)) revert Zero();
@@ -110,7 +120,7 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
     /**
      * Set the liquidity provider
      *
-     * @param _liquidityProvider  address  Account that adds wsLYRA to the LP
+     * @param  _liquidityProvider  address  Account that adds wsLYRA to the LP
      */
     function setLiquidityProvider(
         address _liquidityProvider
@@ -122,10 +132,21 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         emit SetLiquidityProvider(_liquidityProvider);
     }
 
+    /**
+     * Get the vault's stkLYRA balance
+     *
+     * @return uint256  Asset balance
+     */
     function totalAssets() public view override returns (uint256) {
         return asset.balanceOf(address(this));
     }
 
+    /**
+     * Get the stkLYRA balance and wsLYRA supply after rewards and fees are accounted for
+     *
+     * @return  assets  uint256  Post-reward stkLYRA balance
+     * @return  supply  uint256  Post-reward wsLYRA supply
+     */
     function totalsAfterRewards()
         external
         view
@@ -151,10 +172,17 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         supply += protocolRewards.mulDivDown(supply, assets - protocolRewards);
     }
 
+    /**
+     * Deposit LYRA for wsLYRA
+     *
+     * @param  amount    uint256  LYRA amount
+     * @param  receiver  address  Receives wsLYRA
+     * @return shares    uint256  wsLYRA amount
+     */
     function depositLYRA(
         uint256 amount,
         address receiver
-    ) external nonReentrant {
+    ) external nonReentrant returns (uint256 shares) {
         if (amount == 0) revert Zero();
         if (receiver == address(0)) revert Zero();
 
@@ -170,7 +198,7 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         uint256 assets = asset.balanceOf(address(this)) - assetsBeforeStaking;
 
         // Calculate shares using the total assets amount with the new assets deducted
-        uint256 shares = totalSupply == 0
+        shares = totalSupply == 0
             ? assets
             : assets.mulDivDown(totalSupply, assetsBeforeStaking);
 
@@ -179,6 +207,13 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         emit Deposit(msg.sender, receiver, assets, shares);
     }
 
+    /**
+     * Deposit stkLYRA for wsLYRA
+     *
+     * @param  assets    uint256  stkLYRA amount
+     * @param  receiver  address  Receives wsLYRA
+     * @return shares    uint256  wsLYRA amount
+     */
     function deposit(
         uint256 assets,
         address receiver
@@ -197,6 +232,13 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         emit Deposit(msg.sender, receiver, assets, shares);
     }
 
+    /**
+     * Mint wsLYRA with stkLYRA
+     *
+     * @param  shares    uint256  wsLYRA amount
+     * @param  receiver  address  Receives wsLYRA
+     * @return assets    uint256  stkLYRA amount
+     */
     function mint(
         uint256 shares,
         address receiver
@@ -215,6 +257,14 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         emit Deposit(msg.sender, receiver, assets, shares);
     }
 
+    /**
+     * Withdraw stkLYRA with wsLYRA
+     *
+     * @param  assets    uint256  stkLYRA amount
+     * @param  receiver  address  Receives stkLYRA
+     * @param  owner     address  wsLYRA owner
+     * @return shares    uint256  wsLYRA amount
+     */
     function withdraw(
         uint256 assets,
         address receiver,
@@ -242,6 +292,14 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         asset.safeTransfer(receiver, assets);
     }
 
+    /**
+     * Redeem stkLYRA with wsLYRA
+     *
+     * @param  shares    uint256  wsLYRA amount
+     * @param  receiver  address  Receives stkLYRA
+     * @param  owner     address  wsLYRA owner
+     * @return assets    uint256  stkLYRA amount
+     */
     function redeem(
         uint256 shares,
         address receiver,
@@ -269,6 +327,9 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         asset.safeTransfer(receiver, assets);
     }
 
+    /**
+     * Claim stkLYRA rewards
+     */
     function claimRewards() external nonReentrant {
         _claimRewards();
     }

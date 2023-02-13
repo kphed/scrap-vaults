@@ -19,8 +19,11 @@ contract ScrapWrappedStakedLyraTest is Helper {
     address private constant PURGE_ADDRESS =
         0x000000000000000000000000000000000000dEaD;
 
+    // Placeholder for ease of testing purposes
+    address private constant LIQUIDITY_PROVIDER = address(CURVE_FACTORY);
+
     ScrapWrappedStakedLyra private immutable vault =
-        new ScrapWrappedStakedLyra(address(this));
+        new ScrapWrappedStakedLyra(address(this), LIQUIDITY_PROVIDER);
 
     ICryptoPool private immutable curvePool;
     ERC20 private immutable lyra;
