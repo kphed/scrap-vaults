@@ -39,8 +39,8 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
     event SetLiquidityProvider(address liquidityProvider);
     event ClaimRewards(
         uint256 claimableRewards,
-        uint256 protocolRewards,
-        uint256 liquidityShares
+        uint256 liquidityFeeRewards,
+        uint256 liquidityFeeShares
     );
 
     constructor(
@@ -63,33 +63,40 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         liquidityProvider = _liquidityProvider;
     }
 
+    /**
+     * Claim stkLYRA rewards and mint wsLYRA against liquidity fee assets
+     */
     function _claimRewards() private {
         uint256 claimableRewards = STK_LYRA.getTotalRewardsBalance(
             address(this)
         );
-        uint256 protocolRewards = claimableRewards.mulDivDown(
+        uint256 liquidityFeeRewards = claimableRewards.mulDivDown(
             liquidityFee,
             FEE_BASE
         );
 
-        if (protocolRewards == 0) return;
+        if (liquidityFeeRewards == 0) return;
 
         STK_LYRA.claimRewards(address(this), claimableRewards);
 
         // Modified `convertToShares` logic with the liquidity fee deducted from assets
-        uint256 liquidityShares = protocolRewards.mulDivDown(
+        uint256 liquidityFeeShares = liquidityFeeRewards.mulDivDown(
             totalSupply,
-            asset.balanceOf(address(this)) - protocolRewards
+            asset.balanceOf(address(this)) - liquidityFeeRewards
         );
 
         // Mint wsLYRA against the newly-claimed rewards, and add them to the liquidity pool
         _mint(
             // Mint wslYRA for the liquidity provider, who will add it to the LP
             liquidityProvider,
-            liquidityShares
+            liquidityFeeShares
         );
 
-        emit ClaimRewards(claimableRewards, protocolRewards, liquidityShares);
+        emit ClaimRewards(
+            claimableRewards,
+            liquidityFeeRewards,
+            liquidityFeeShares
+        );
     }
 
     /**
