@@ -30,8 +30,13 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
 
     address public liquidityPool;
 
+    // Receives the wsLYRA liquidity fee and adds it to the LP via a separate process
+    // aimed at mitigating front or back-running and with improved slippage control
+    address public liquidityProvider;
+
     event SetLiquidityFee(uint256);
     event SetLiquidityPool(address);
+    event SetLiquidityProvider(address);
 
     constructor(
         address _owner
@@ -45,6 +50,9 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
     {
         // Pre-set an allowance to save gas and enable us to stake LYRA
         LYRA.safeApprove(address(STK_LYRA), type(uint256).max);
+
+        // Initially set to the contract owner until the liquidityProvider contract is complete
+        liquidityProvider = owner;
     }
 
     function _claimRewards() private {
@@ -62,8 +70,9 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
 
         // Mint wsLYRA against the newly-claimed rewards, and add them to the liquidity pool
         _mint(
-            // No safety rails: it is on the owner to set a valid liquidity pool
-            liquidityPool,
+            // Mint wslYRA for the liquidity provider, who will add it to the LP. Initially,
+            // this will be done manually by the owner, but will be replaced by a contract
+            liquidityProvider,
             // Modified `convertToShares` logic with the assumption that totalSupply is
             // always non-zero, and with the reward fee amount deducted from assets after claim
             protocolRewards.mulDivDown(
@@ -73,6 +82,11 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         );
     }
 
+    /**
+     * Set the liquidity fee
+     *
+     * @param _liquidityFee  uint256  Liquidity fee in BPS
+     */
     function setLiquidityFee(uint256 _liquidityFee) external onlyOwner {
         // If fee exceeds max, set it to the max fee
         liquidityFee = _liquidityFee > MAX_FEE ? MAX_FEE : _liquidityFee;
@@ -80,12 +94,32 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         emit SetLiquidityFee(_liquidityFee);
     }
 
+    /**
+     * Set the liquidity pool
+     *
+     * @param _liquidityPool  address  LYRA/wsLYRA LP contract address
+     */
     function setLiquidityPool(address _liquidityPool) external onlyOwner {
         if (_liquidityPool == address(0)) revert Zero();
 
         liquidityPool = _liquidityPool;
 
         emit SetLiquidityPool(_liquidityPool);
+    }
+
+    /**
+     * Set the liquidity provider
+     *
+     * @param _liquidityProvider  address  Account that adds wsLYRA to the LP
+     */
+    function setLiquidityProvider(
+        address _liquidityProvider
+    ) external onlyOwner {
+        if (_liquidityProvider == address(0)) revert Zero();
+
+        liquidityProvider = _liquidityProvider;
+
+        emit SetLiquidityProvider(_liquidityProvider);
     }
 
     function totalAssets() public view override returns (uint256) {
