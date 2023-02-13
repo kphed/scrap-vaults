@@ -32,11 +32,6 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
 
     event SetLiquidityFee(uint32 liquidityFee);
     event SetLiquidityProvider(address liquidityProvider);
-    event ClaimRewards(
-        uint256 claimableRewards,
-        uint256 liquidityFeeRewards,
-        uint256 liquidityFeeShares
-    );
 
     constructor(
         address _owner,
@@ -80,18 +75,8 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
             asset.balanceOf(address(this)) - liquidityFeeRewards
         );
 
-        // Mint wsLYRA against the newly-claimed rewards, and add them to the liquidity pool
-        _mint(
-            // Mint wslYRA for the liquidity provider, who will add it to the LP
-            liquidityProvider,
-            liquidityFeeShares
-        );
-
-        emit ClaimRewards(
-            claimableRewards,
-            liquidityFeeRewards,
-            liquidityFeeShares
-        );
+        // Mint wsLYRA for the liquidity provider, who can add it to the LP
+        _mint(liquidityProvider, liquidityFeeShares);
     }
 
     /**
@@ -133,8 +118,8 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
     /**
      * Get the stkLYRA balance and wsLYRA supply after rewards and fees are accounted for
      *
-     * @return  assets  uint256  Post-reward stkLYRA balance
-     * @return  supply  uint256  Post-reward wsLYRA supply
+     * @return assets  uint256  Post-reward stkLYRA balance
+     * @return supply  uint256  Post-reward wsLYRA supply
      */
     function totalsAfterRewards()
         external

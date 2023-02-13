@@ -44,11 +44,6 @@ contract ScrapWrappedStakedLyraTest is Helper {
     );
     event SetLiquidityFee(uint32 liquidityFee);
     event SetLiquidityProvider(address liquidityProvider);
-    event ClaimRewards(
-        uint256 claimableRewards,
-        uint256 liquidityFeeRewards,
-        uint256 liquidityFeeShares
-    );
 
     constructor() {
         address[2] memory coins = [
@@ -890,14 +885,6 @@ contract ScrapWrappedStakedLyraTest is Helper {
             uint256 totalAssetsAfterRewards,
             uint256 totalSupplyAfterRewards
         ) = vault.totalsAfterRewards();
-
-        vm.expectEmit(false, false, false, true, address(vault));
-
-        emit ClaimRewards(
-            claimableRewards,
-            liquidityFeeRewards,
-            liquidityFeeShares
-        );
 
         vault.claimRewards();
 
