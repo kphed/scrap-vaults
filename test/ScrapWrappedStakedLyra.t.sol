@@ -42,8 +42,14 @@ contract ScrapWrappedStakedLyraTest is Helper {
         uint256 assets,
         uint256 shares
     );
-    event SetLiquidityFee(uint256);
-    event SetLiquidityPool(address);
+    event SetLiquidityFee(uint256 liquidityFee);
+    event SetLiquidityPool(address liquidityPool);
+    event SetLiquidityProvider(address liquidityProvider);
+    event ClaimRewards(
+        uint256 claimableRewards,
+        uint256 protocolRewards,
+        uint256 liquidityShares
+    );
 
     constructor() {
         address[2] memory coins = [
@@ -341,6 +347,39 @@ contract ScrapWrappedStakedLyraTest is Helper {
         vault.setLiquidityPool(liquidityPool);
 
         assertEq(liquidityPool, vault.liquidityPool());
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        setLiquidityProvider TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    function testCannotSetLiquidityProviderUnauthorized() external {
+        address liquidityProvider = address(this);
+
+        vm.expectRevert(UNAUTHORIZED_ERROR);
+        vm.prank(address(0));
+
+        vault.setLiquidityProvider(liquidityProvider);
+    }
+
+    function testCannotSetLiquidityProviderZeroAddress() external {
+        address liquidityProvider = address(0);
+
+        vm.expectRevert(Zero.selector);
+
+        vault.setLiquidityProvider(liquidityProvider);
+    }
+
+    function testSetLiquidityProvider() public {
+        address liquidityProvider = address(this);
+
+        vm.expectEmit(false, false, false, true, address(vault));
+
+        emit SetLiquidityProvider(liquidityProvider);
+
+        vault.setLiquidityProvider(liquidityProvider);
+
+        assertEq(liquidityProvider, vault.liquidityProvider());
     }
 
     /*//////////////////////////////////////////////////////////////
