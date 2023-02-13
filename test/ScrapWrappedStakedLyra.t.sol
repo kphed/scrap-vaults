@@ -42,7 +42,7 @@ contract ScrapWrappedStakedLyraTest is Helper {
         uint256 assets,
         uint256 shares
     );
-    event SetLiquidityFee(uint256 liquidityFee);
+    event SetLiquidityFee(uint32 liquidityFee);
     event SetLiquidityProvider(address liquidityProvider);
     event ClaimRewards(
         uint256 claimableRewards,
@@ -310,7 +310,7 @@ contract ScrapWrappedStakedLyraTest is Helper {
     //////////////////////////////////////////////////////////////*/
 
     function testCannotSetLiquidityFeeUnauthorized() external {
-        uint256 fee = 1;
+        uint32 fee = 1;
 
         vm.expectRevert(UNAUTHORIZED_ERROR);
         vm.prank(address(0));
@@ -318,9 +318,9 @@ contract ScrapWrappedStakedLyraTest is Helper {
         vault.setLiquidityFee(fee);
     }
 
-    function testSetLiquidityFeeFuzz(uint16 fee) external {
-        uint256 maxFee = vault.MAX_FEE();
-        uint256 expectedFee = fee > maxFee ? maxFee : fee;
+    function testSetLiquidityFeeFuzz(uint32 fee) external {
+        uint32 maxFee = vault.MAX_FEE();
+        uint32 expectedFee = fee > maxFee ? maxFee : fee;
 
         vm.expectEmit(false, false, false, true, address(vault));
 

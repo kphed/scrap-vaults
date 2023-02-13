@@ -2,8 +2,8 @@
 pragma solidity 0.8.18;
 
 import {ERC4626} from "solmate/mixins/ERC4626.sol";
-import {ERC20} from "solmate/tokens/ERC20.sol";
 import {Owned} from "solmate/auth/Owned.sol";
+import {ERC20} from "solmate/tokens/ERC20.sol";
 import {ReentrancyGuard} from "solmate/utils/ReentrancyGuard.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
@@ -18,19 +18,19 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         IstkLYRA(0xCb9f85730f57732fc899fb158164b9Ed60c77D49);
     ERC20 public constant LYRA =
         ERC20(0x01BA67AAC7f75f647D94220Cc98FB30FCc5105Bf);
-    uint256 public constant FEE_BASE = 10_000;
+    uint32 public constant FEE_BASE = 10_000;
 
     // Maximum fee is 10% and can only be reduced from here
-    uint256 public constant MAX_FEE = 1_000;
+    uint32 public constant MAX_FEE = 1_000;
 
     // All fees are added to the LYRA/wsLYRA liquidity pool
-    uint256 public liquidityFee = 1_000;
+    uint32 public liquidityFee = 1_000;
 
     // Receives the wsLYRA liquidity fee and adds it to the LP via a separate process
     // aimed at mitigating front or back-running and with improved slippage control
     address public liquidityProvider;
 
-    event SetLiquidityFee(uint256 liquidityFee);
+    event SetLiquidityFee(uint32 liquidityFee);
     event SetLiquidityProvider(address liquidityProvider);
     event ClaimRewards(
         uint256 claimableRewards,
@@ -97,9 +97,9 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
     /**
      * Set the liquidity fee
      *
-     * @param  _liquidityFee  uint256  Liquidity fee in BPS
+     * @param  _liquidityFee  uint32  Liquidity fee in BPS
      */
-    function setLiquidityFee(uint256 _liquidityFee) external onlyOwner {
+    function setLiquidityFee(uint32 _liquidityFee) external onlyOwner {
         // If fee exceeds max, set it to the max fee
         liquidityFee = _liquidityFee > MAX_FEE ? MAX_FEE : _liquidityFee;
 
