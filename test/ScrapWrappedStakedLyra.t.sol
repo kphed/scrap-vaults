@@ -43,7 +43,6 @@ contract ScrapWrappedStakedLyraTest is Helper {
         uint256 shares
     );
     event SetLiquidityFee(uint256 liquidityFee);
-    event SetLiquidityPool(address liquidityPool);
     event SetLiquidityProvider(address liquidityProvider);
     event ClaimRewards(
         uint256 claimableRewards,
@@ -57,7 +56,7 @@ contract ScrapWrappedStakedLyraTest is Helper {
             address(vault)
         ];
 
-        vault.setLiquidityPool(
+        curvePool = ICryptoPool(
             CURVE_FACTORY.deploy_pool(
                 "Curve.fi LYRA/wsLYRA",
                 "wsLYRACRV",
@@ -74,8 +73,6 @@ contract ScrapWrappedStakedLyraTest is Helper {
                 1100000000000000000
             )
         );
-
-        curvePool = ICryptoPool(vault.liquidityPool());
         lyra = vault.LYRA();
         stkLYRA = ERC20(address(vault.STK_LYRA()));
 
@@ -332,39 +329,6 @@ contract ScrapWrappedStakedLyraTest is Helper {
         vault.setLiquidityFee(expectedFee);
 
         assertEq(expectedFee, vault.liquidityFee());
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                        setLiquidityPool TESTS
-    //////////////////////////////////////////////////////////////*/
-
-    function testCannotSetLiquidityPoolUnauthorized() external {
-        address liquidityPool = address(this);
-
-        vm.expectRevert(UNAUTHORIZED_ERROR);
-        vm.prank(address(0));
-
-        vault.setLiquidityPool(liquidityPool);
-    }
-
-    function testCannotSetLiquidityPoolZeroAddress() external {
-        address liquidityPool = address(0);
-
-        vm.expectRevert(Zero.selector);
-
-        vault.setLiquidityPool(liquidityPool);
-    }
-
-    function testSetLiquidityPool() public {
-        address liquidityPool = address(this);
-
-        vm.expectEmit(false, false, false, true, address(vault));
-
-        emit SetLiquidityPool(liquidityPool);
-
-        vault.setLiquidityPool(liquidityPool);
-
-        assertEq(liquidityPool, vault.liquidityPool());
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -945,6 +909,8 @@ contract ScrapWrappedStakedLyraTest is Helper {
         assertEq(totalAssetsAfterRewards, totalAssets);
         assertEq(totalSupplyAfterRewards, totalSupply);
 
+        // Calling `claimRewards` without any claimable rewards should not result
+        // in any changes to total assets or supply
         vault.claimRewards();
 
         assertEq(totalAssets, vault.totalAssets());

@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.18;
 
-import "forge-std/Test.sol";
-
 import {ERC4626} from "solmate/mixins/ERC4626.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {Owned} from "solmate/auth/Owned.sol";
-import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {ReentrancyGuard} from "solmate/utils/ReentrancyGuard.sol";
+import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {Errors} from "src/utils/Errors.sol";
 import {IstkLYRA} from "src/interfaces/IstkLYRA.sol";
@@ -28,14 +26,11 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
     // All fees are added to the LYRA/wsLYRA liquidity pool
     uint256 public liquidityFee = 1_000;
 
-    address public liquidityPool;
-
     // Receives the wsLYRA liquidity fee and adds it to the LP via a separate process
     // aimed at mitigating front or back-running and with improved slippage control
     address public liquidityProvider;
 
     event SetLiquidityFee(uint256 liquidityFee);
-    event SetLiquidityPool(address liquidityPool);
     event SetLiquidityProvider(address liquidityProvider);
     event ClaimRewards(
         uint256 claimableRewards,
@@ -109,19 +104,6 @@ contract ScrapWrappedStakedLyra is Errors, ReentrancyGuard, Owned, ERC4626 {
         liquidityFee = _liquidityFee > MAX_FEE ? MAX_FEE : _liquidityFee;
 
         emit SetLiquidityFee(_liquidityFee);
-    }
-
-    /**
-     * Set the liquidity pool
-     *
-     * @param  _liquidityPool  address  LYRA/wsLYRA LP contract address
-     */
-    function setLiquidityPool(address _liquidityPool) external onlyOwner {
-        if (_liquidityPool == address(0)) revert Zero();
-
-        liquidityPool = _liquidityPool;
-
-        emit SetLiquidityPool(_liquidityPool);
     }
 
     /**
