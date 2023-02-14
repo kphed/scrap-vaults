@@ -7,8 +7,8 @@ import {FixedPointMathLib} from "solmate/utils/FixedPointMathLib.sol";
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {ScrapWrappedStakedLyra} from "src/ScrapWrappedStakedLyra.sol";
 import {IstkLYRA} from "src/interfaces/IstkLYRA.sol";
-import {ICurveFactory} from "test/interfaces/ICurveFactory.sol";
-import {ICryptoPool} from "test/interfaces/ICryptoPool.sol";
+import {ICurveFactory} from "src/interfaces/ICurveFactory.sol";
+import {ICryptoPool} from "src/interfaces/ICryptoPool.sol";
 
 contract ScrapWrappedStakedLyraTest is Helper {
     using FixedPointMathLib for uint256;

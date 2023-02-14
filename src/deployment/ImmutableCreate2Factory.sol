@@ -45,15 +45,11 @@ contract ImmutableCreate2Factory is Owned {
         _;
     }
 
-    function setInitializationCode(bytes memory code) external {
-        if (msg.sender != owner) return;
-
+    function setInitializationCode(bytes memory code) external onlyOwner {
         _initCode = code;
     }
 
     function getInitializationCode() external view returns (bytes memory) {
-        if (msg.sender != owner) return bytes("");
-
         return _initCode;
     }
 
@@ -77,8 +73,6 @@ contract ImmutableCreate2Factory is Owned {
         containsCaller(salt)
         returns (address deploymentAddress)
     {
-        if (msg.sender != owner) return address(0);
-
         // move the initialization code from calldata to memory.
         bytes memory initCode = initializationCode;
 
@@ -146,8 +140,6 @@ contract ImmutableCreate2Factory is Owned {
         bytes32 salt,
         bytes calldata initCode
     ) external view returns (address deploymentAddress) {
-        if (msg.sender != owner) return address(0);
-
         // determine the address where the contract will be deployed.
         deploymentAddress = address(
             uint160( // downcast to match the address type.
@@ -177,9 +169,7 @@ contract ImmutableCreate2Factory is Owned {
      */
     function getTransientChild(
         address transientContractAddress
-    ) external view returns (address) {
-        if (msg.sender != owner) return address(0);
-
+    ) external pure returns (address) {
         // determine the address of the metamorphic contract.
         return
             address(
@@ -201,9 +191,7 @@ contract ImmutableCreate2Factory is Owned {
     function getSalt(
         address caller,
         string memory word
-    ) external view returns (bytes32) {
-        if (msg.sender != owner) return bytes32(0);
-
+    ) external pure returns (bytes32) {
         return bytes32(abi.encodePacked(bytes20(caller), bytes12(bytes(word))));
     }
 }
