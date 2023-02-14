@@ -4,8 +4,10 @@ src = 'src'
 out = 'out'
 libs = ['lib']
 verbosity = 3
-extra_output = ["storageLayout"]
-optimizer_runs = 100000
+optimizer_runs = 10_000
+
+[profile.default.optimizer_details]
+constantOptimizer = true
 
 [fuzz]
 runs = 100
